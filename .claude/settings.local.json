@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm list:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "kappa",
+    "vibekit-mcp"
+  ]
+}
