@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Agreements & delivery proofs (local, private)
+agreements/
+delivery/
+
+# Wallet secrets (never commit mnemonics/keys)
+*.mnemonic
+*.key
+keys/
+
+# AlgoKit
+.localnet/
+.algokit/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sessions
+.claude/sessions/
