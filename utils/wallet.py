@@ -123,7 +123,7 @@ def fund_wallet_from_faucet(address: str, microns: int = 5_000_000) -> str:
     """
     import requests
 
-    faucet_url = "https://testnet.faucet.algorand.org/v1/dispense"
+    faucet_url = "https://dispenser.testnet.algorand.org"
     payload = {"address": address, "amount": microns}
     resp = requests.post(faucet_url, json=payload, timeout=30)
     resp.raise_for_status()

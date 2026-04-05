@@ -1,0 +1,200 @@
+#pragma version 8
+txn OnCompletion
+int OptIn
+==
+bnz main_l23
+txn OnCompletion
+int NoOp
+==
+bnz main_l9
+txn OnCompletion
+int CloseOut
+==
+bnz main_l8
+txn OnCompletion
+int UpdateApplication
+==
+bnz main_l7
+txn OnCompletion
+int DeleteApplication
+==
+bnz main_l6
+err
+main_l6:
+txn Sender
+global CreatorAddress
+==
+byte "s"
+app_global_get
+int 0
+==
+byte "s"
+app_global_get
+int 4
+==
+||
+&&
+return
+main_l7:
+txn Sender
+global CreatorAddress
+==
+return
+main_l8:
+int 1
+return
+main_l9:
+txn NumAppArgs
+int 0
+==
+bnz main_l22
+txna ApplicationArgs 0
+byte "lock"
+==
+bnz main_l21
+txna ApplicationArgs 0
+byte "deliver"
+==
+bnz main_l20
+txna ApplicationArgs 0
+byte "release"
+==
+bnz main_l19
+txna ApplicationArgs 0
+byte "refund"
+==
+bnz main_l18
+txna ApplicationArgs 0
+byte "get_state"
+==
+bnz main_l16
+err
+main_l16:
+byte "s"
+app_global_get
+pop
+int 1
+return
+int 0
+return
+main_l18:
+byte "s"
+app_global_get
+int 1
+==
+assert
+txn Sender
+byte "b"
+app_global_get
+==
+assert
+global LatestTimestamp
+byte "d"
+app_global_get
+>
+assert
+itxn_begin
+int pay
+itxn_field TypeEnum
+byte "b"
+app_global_get
+itxn_field Receiver
+byte "a"
+app_global_get
+itxn_field Amount
+itxn_submit
+byte "s"
+int 4
+app_global_put
+int 1
+return
+main_l19:
+byte "s"
+app_global_get
+int 2
+==
+assert
+itxn_begin
+int pay
+itxn_field TypeEnum
+byte "u"
+app_global_get
+itxn_field Receiver
+byte "a"
+app_global_get
+itxn_field Amount
+itxn_submit
+byte "s"
+int 3
+app_global_put
+int 1
+return
+main_l20:
+byte "s"
+app_global_get
+int 1
+==
+assert
+txn Sender
+byte "u"
+app_global_get
+==
+assert
+byte "p"
+txna ApplicationArgs 1
+app_global_put
+byte "s"
+int 2
+app_global_put
+int 1
+return
+main_l21:
+gtxn 0 TypeEnum
+int pay
+==
+assert
+gtxn 0 Receiver
+global CurrentApplicationAddress
+==
+assert
+gtxn 0 Amount
+int 100000
+>=
+assert
+byte "s"
+app_global_get
+int 0
+==
+assert
+byte "s"
+int 1
+app_global_put
+byte "b"
+gtxn 0 Sender
+app_global_put
+byte "u"
+txna Accounts 1
+app_global_put
+byte "a"
+gtxn 0 Amount
+app_global_put
+byte "h"
+txna ApplicationArgs 2
+app_global_put
+byte "d"
+txna ApplicationArgs 3
+btoi
+app_global_put
+byte "p"
+byte ""
+app_global_put
+int 1
+return
+main_l22:
+int 1
+return
+main_l23:
+int 1
+return
+int 0
+return
