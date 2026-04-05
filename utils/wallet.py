@@ -94,6 +94,26 @@ def load_wallet(agent_id: str) -> Wallet:
     )
 
 
+def get_supplier_wallet(supplier_id: str) -> Wallet | None:
+    """
+    Load a supplier's wallet by supplier_id.
+    Wallets are stored at keys/{supplier_id}.json.
+    Returns None if the wallet file does not exist.
+    """
+    path = WALLET_DIR / f"{supplier_id}.json"
+    if not path.exists():
+        return None
+    import json
+
+    with open(path) as f:
+        data = json.load(f)
+    return Wallet(
+        address=data["address"],
+        private_key=mnemonic.to_private_key(data["mnemonic"]),
+        mnemonic=data["mnemonic"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Wallet operations
 # ---------------------------------------------------------------------------
