@@ -94,109 +94,134 @@ demo.py
 
 ---
 
-## Phase 3 — FastAPI Marketplace & Seed Data
+## Phase 3 — FastAPI Marketplace & Seed Data ✅ COMPLETED
 
 > **Why first:** Both agent types need to query suppliers before anything else. The marketplace must be running before agents can do anything.
 
-### Step 3.1 — `marketplace/registry.py`
+**Period:** 2026-04-06
 
-| Method | Endpoint            | Purpose                                            |
-| ------ | ------------------- | -------------------------------------------------- |
-| GET    | `/suppliers`        | List all suppliers, filter by category / rating    |
-| GET    | `/suppliers/{id}`   | Get a single supplier's full profile               |
-| POST   | `/suppliers`        | Register a supplier (used by `seed_data.py`)       |
-| PUT    | `/suppliers/{id}`   | Update supplier rating or inventory                |
-| GET    | `/rfqs`             | List all RFQs                                      |
-| POST   | `/rfqs`             | Create an RFQ (procurement agent posts here)       |
-| GET    | `/rfqs/{id}/quotes` | Fetch all quotes for an RFQ (short-circuits Redis) |
+### Steps Completed
 
-### Step 3.2 — `marketplace/seed_data.py`
+| Step | File | Status |
+|------|------|--------|
+| 3.1 | `marketplace/registry.py` | Done — FastAPI app with 14 routes (health, suppliers CRUD, rfqs CRUD, quotes, status) |
+| 3.2 | `marketplace/seed_data.py` | Done — seeds FurniCo, ChairHub, OfficePro |
 
-- Insert 3 sample suppliers into the SQLite registry
-- Supplier names: **FurniCo**, **ChairHub**, **OfficePro**
-- Fields to seed: category, rating, wallet address, min acceptable price
+### Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/health` | Health check |
+| GET | `/suppliers` | List all suppliers, filter by category / min_rating |
+| GET | `/suppliers/{id}` | Single supplier (404 if not found) |
+| POST | `/suppliers` | Register supplier (201, validates required fields) |
+| PUT | `/suppliers/{id}` | Update rating/inventory (404 if not found) |
+| GET | `/rfqs` | List RFQs, filter by status / agent_id |
+| GET | `/rfqs/{id}` | Single RFQ (404 if not found) |
+| POST | `/rfqs` | Create RFQ (verifies agent FK, 404 if not found) |
+| GET | `/rfqs/{id}/quotes` | Fetch quotes — Redis-first, falls back to SQLite |
+| PATCH | `/rfqs/{id}/status` | Status transitions with closed_at stamp |
+
+### Seeded Suppliers
+
+- **FurniCo** — furniture, rating 4.7, base_cost 150, margin 20%, lead 14 days, warranty 3yr
+- **ChairHub** — furniture, rating 4.2, base_cost 95, margin 18%, lead 7 days, warranty 2yr
+- **OfficePro** — office_supplies, rating 4.5, base_cost 10, margin 25%, lead 3 days, warranty 1yr
+
+### Bug Fixed During Phase 3
+
+- `suppliers.created_at` NOT NULL constraint failed — INSERT wasn't providing created_at.
+  Fixed: explicitly set `created_at = datetime.now(timezone.utc).isoformat()` in both create and update.
 
 ---
 
-## Phase 4 — Supplier Agent Tools
+## Phase 4 — Supplier Agent Tools ✅ COMPLETED
 
 > **Why next:** Supplier agents are passive listeners — they respond to RFQs. Their tools must work standalone so they can process incoming requests independently.
 
-### Step 4.1 — `tools/check_inventory.py`
+**Period:** 2026-04-06
 
-- Query SQLite `inventory` table for item + quantity availability
-- Return: `available` (bool), `dispatch_days`, `stock_count`
+### Steps Completed
 
-### Step 4.2 — `tools/calculate_quote.py`
+| Step | File | Status |
+|------|------|--------|
+| 4.1 | `tools/check_inventory.py` | Done — SQLite inventory query, returns InventoryResult |
+| 4.2 | `tools/calculate_quote.py` | Done — base_cost × (1+margin_pct) + delivery_charge, 30-min validity |
+| 4.3 | `tools/evaluate_counter.py` | Done — accept/counter/reject per negotiation rules |
+| 4.4 | `tools/submit_proof.py` | Done — hash proof, call on-chain submit_delivery, update deals |
 
-- Compute unit price from base cost, margin, and delivery charges
-- Return: `unit_price`, `delivery_days`, `warranty_years`, `quote_validity`
-- Formula:
-  ```
-  unit_price = base_cost × (1 + margin_pct) + delivery_charge_per_unit
-  ```
+### Implementation Notes
 
-### Step 4.3 — `tools/evaluate_counter.py`
+**`tools/check_inventory.py`** — JOINs inventory + suppliers, returns `InventoryResult(available, dispatch_days, stock_count, reserved_qty, unit_cost)`. Not-found → `available=False, stock_count=0`.
 
-- Accept / counter / reject logic for incoming counter-offers
-- Rules:
-  - Never go below `price_floor`
-  - Maximum 8% discount from initial quote
-  - Meet halfway on the first counter, hold firm after that
-- Return: `{ decision: "accept" | "counter" | "reject", terms: { ... } }`
+**`tools/calculate_quote.py`** — Formula: `unit_price = base_cost × (1 + margin_pct/100) + (unit_cost × 0.02)`. Returns `QuoteResult(unit_price, total_price, delivery_days, warranty_yrs, valid_until)`.
 
-### Step 4.4 — `tools/submit_proof.py`
+**`tools/evaluate_counter.py`** — Decision rules:
+- `≥ initial` → **accept**
+- `< price_floor` → **reject**
+- `≥ max_acceptable` (8% off) → round 1: meet halfway; round 2: hold firm at max
+- `< max_acceptable` + rounds left → counter at midway
+- `round_number > 2` (max rounds exceeded) → **reject**
 
-- Read delivery proof JSON from the `delivery/` directory
-- Call `utils/hashing.py` → `anchor_delivery_proof()`
-- Call `contracts/interact.py` → `submit_delivery()`
-- Save proof hash to the SQLite `deals` table
+**`tools/submit_proof.py`** — Loads `delivery/{deal_id}.json`, hashes via `anchor_delivery_proof()`, calls `submit_delivery()` on-chain, updates `deals.status='delivered'`, logs txn.
+
+**`utils/wallet.py`** — Added `get_supplier_wallet(supplier_id)` to load `keys/{supplier_id}.json`.
+
+### Bug Fixed During Phase 4
+
+- `evaluate_counter`: `round_number >= MAX_NEGOTIATION_ROUNDS` rejected at round 2 prematurely.
+  Fixed to `round_number > MAX_NEGOTIATION_ROUNDS` so round 2 properly counters instead of rejecting.
 
 ---
 
-## Phase 5 — Procurement Agent Tools
+## Phase 5 — Procurement Agent Tools ✅ COMPLETED
 
 > **Why next:** The procurement agent is the active initiator. It searches, broadcasts RFQs, scores quotes, and signs escrow — all tools must be solid before wiring the agent.
 
-### Step 5.1 — `tools/search_suppliers.py`
+**Period:** 2026-04-06
 
-- Call marketplace API → `GET /suppliers?category=X&min_rating=Y`
-- Return: ranked list of `(supplier_id, name, rating, avg_price)`
+### Steps Completed
 
-### Step 5.2 — `tools/send_rfq.py`
+| Step | File | Status |
+|------|------|--------|
+| 5.1 | `tools/search_suppliers.py` | Done — API-first with SQLite fallback, category/rating/item filters, returns SupplierMatch list |
+| 5.2 | `tools/send_rfq.py` | Done — API-first with SQLite fallback, Redis quote window (TTL 30s), 30s polling for live quotes, returns RFQResult |
+| 5.3 | `tools/compare_quotes.py` | Done — Redis-first with SQLite fallback, weighted multi-criteria scoring, returns CompareResult with winner/runner-up |
+| 5.4 | `tools/sign_escrow.py` | Done — anchor_agreement → deal_hash, lock_escrow on-chain, save agreement JSON to `agreements/`, record deal in SQLite |
 
-- Call marketplace API → `POST /rfqs`
-- Open Redis key: `rfq:{id}:quotes` with TTL of 30 seconds
-- Store the RFQ record in SQLite
-- Wait up to 30 seconds for supplier responses to arrive via Redis
+### Implementation Notes
 
-### Step 5.3 — `tools/compare_quotes.py`
+**`tools/search_suppliers.py`** — Calls `GET /suppliers` on marketplace API with category/rating filters; falls back to direct SQLite query (JOINs inventory+suppliers) when API unreachable. Returns `list[SupplierMatch]` ranked by rating.
 
-- Fetch all quotes for the RFQ from Redis or the marketplace API
-- Apply the scoring formula:
+**`tools/send_rfq.py`** — Posts RFQ to marketplace API; on API failure falls back to direct SQLite INSERT. Opens Redis quote window via `open_quote_window()` (TTL 30s). Polls Redis for up to 30s collecting supplier quotes. Returns `RFQResult` with `supplier_quotes` list.
 
-  ```
-  Score = (price_score    × 0.40)
-        + (delivery_score × 0.30)
-        + (rating_score   × 0.20)
-        + (warranty_score × 0.10)
+**`tools/compare_quotes.py`** — Fetches quotes Redis-first, falls back to SQLite JOIN with supplier metadata. Applies exact CLAUDE.md formula:
+```
+Score = (min_price/price × 0.40) + (min_days/days × 0.30) + (rating/max × 0.20) + (warranty/max × 0.10)
+```
+Returns `CompareResult` with `quotes_scored`, `winner`, `runner_up`.
 
-  Where each score is normalized to 0–100:
-    price_score    = (min_price / supplier_price) × 100
-    delivery_score = (min_days  / supplier_days)  × 100
-    rating_score   = (supplier_rating / max_rating) × 100
-    warranty_score = (supplier_warranty_yrs / max_warranty_yrs) × 100
-  ```
+**`tools/sign_escrow.py`** — Builds agreement dict → `anchor_agreement()` → `deal_hash`; calls `lock_escrow()` (group txn: payment + app call); saves `agreements/{deal_id}.json`; inserts deal into SQLite `deals` table. Returns `SignResult` with txid and confirmed round. Pre-chain integrity verified: no orphan records on on-chain failure.
 
-- Return: ranked list with scores, declare winner
+### Bugs Fixed During Phase 5
 
-### Step 5.4 — `tools/sign_escrow.py`
+1. `log_tool_call()` signature — `result` was required but `send_rfq` calls it before result exists. Fixed: made `result` optional with default `None`.
+2. `send_rfq` API fallback — exception was propagating instead of falling through to SQLite. Fixed: proper `except` block wrapping SQLite fallback.
+3. `send_rfq` SQLite INSERT — missing `created_at` column caused NOT NULL constraint failure. Fixed: added `created_at = datetime.now(timezone.utc).isoformat()` to INSERT.
+4. `sign_escrow` missing import — `dataclass` not imported. Fixed: added `from dataclasses import dataclass`.
+5. `sign_escrow` schema mismatch — INSERT used wrong column names vs actual `deals` table schema:
+   - `buyer_agent_id` → `buyer_id`
+   - `total_price` → `total_amount`
+   - `deadline_ts` (int Unix timestamp) → `deadline` (ISO string via `datetime.fromtimestamp`)
+   - Added `escrow_app_id` (TEXT from config) and `escrow_address` (from config)
+   - Added `locked_at = now`
 
-- Build agreement dict: `{ rfq_id, supplier_id, item, qty, price, delivery, warranty }`
-- Call `utils/hashing.py` → `anchor_agreement()` → produces `deal_hash`
-- Call `contracts/interact.py` → `lock_escrow()` group transaction
-- Save the full agreement JSON to the `agreements/` directory
-- Record `deal_hash` and `txn_id` in the SQLite `deals` table
+### Verification Results (2026-04-06)
+
+- `search_suppliers`: 3 suppliers found via SQLite fallback, category/rating filters work
+- `send_rfq`: RFQ created in DB (status=open), Redis window attempted, quotes_rcvd=0 (Redis down)
+- `compare_quotes`: 1 quote scored, winner=ToolTestSup1 at score=100.0
+- `sign_escrow`: `deal_hash` anchored correctly; on-chain fails with `AlgodHTTPError: overspend` (buyer wallet has 0 ALGO — expected); pre-chain integrity verified (no orphan deals, no orphan agreement files)
 
 ---
 
@@ -289,30 +314,35 @@ One-command runner that orchestrates the full demo:
 Total files to build for MVP:
 
 ```
-□ marketplace/registry.py          (Phase 3.1)
-□ marketplace/seed_data.py         (Phase 3.2)
+✅ marketplace/registry.py          (Phase 3.1)
+✅ marketplace/seed_data.py      (Phase 3.2)
 
-□ tools/check_inventory.py         (Phase 4.1)
-□ tools/calculate_quote.py         (Phase 4.2)
-□ tools/evaluate_counter.py        (Phase 4.3)
-□ tools/submit_proof.py            (Phase 4.4)
+✅ tools/check_inventory.py      (Phase 4.1)
+✅ tools/calculate_quote.py       (Phase 4.2)
+✅ tools/evaluate_counter.py      (Phase 4.3)
+✅ tools/submit_proof.py         (Phase 4.4)
 
-□ tools/search_suppliers.py        (Phase 5.1)
-□ tools/send_rfq.py                (Phase 5.2)
-□ tools/compare_quotes.py          (Phase 5.3)
-□ tools/sign_escrow.py             (Phase 5.4)
+✅ tools/search_suppliers.py     (Phase 5.1)
+✅ tools/send_rfq.py             (Phase 5.2)
+✅ tools/compare_quotes.py       (Phase 5.3)
+✅ tools/sign_escrow.py          (Phase 5.4)
 
-□ agents/prompts/procurement.txt   (Phase 6.1)
-□ agents/prompts/supplier.txt      (Phase 6.2)
-□ agents/supplier_agent.py         (Phase 6.3)
-□ agents/procurement_agent.py      (Phase 6.4)
+□ agents/prompts/procurement.txt (Phase 6.1)
+□ agents/prompts/supplier.txt    (Phase 6.2)
+□ agents/supplier_agent.py       (Phase 6.3)
+□ agents/procurement_agent.py    (Phase 6.4)
 
-□ demo.py                          (Phase 7.1)
-□ utils/logger.py                  (Phase 7.2)
+□ demo.py                        (Phase 7.1)
 ```
 
-**Total: 16 files to MVP.**
+**Completed: 10 / 14 files.**
 
 ---
+
+## Known Issues (Post Phase 5)
+
+- Redis not running — `redis_client.ping()` returns False (expected locally, not installed)
+- Buyer wallet (DDIIYCXZWOVIERH7CB5RS2CO2B2JVK2BF6GGVULLHKWPUMF2VEBP6Z2KG4) has 0 ALGO — needs faucet funding before on-chain contract calls
+- Python 3.13.7 — `hmac.compare_digest` required (not `hashlib.compare_digest`)
 
 _Follow phases in order: 3 → 4 → 5 → 6 → 7 → 8_

@@ -96,12 +96,15 @@ def log_tool_call(
     logger: logging.Logger,
     tool_name: str,
     args: dict[str, Any],
-    result: Any,
+    result: Any = None,
 ) -> None:
     """Log a tool call with its arguments and result at DEBUG level."""
     # Scrub sensitive values
     safe_args = _scrub_args(args)
-    logger.debug("TOOL_CALL tool=%s args=%s result_type=%s", tool_name, safe_args, type(result).__name__)
+    if result is not None:
+        logger.debug("TOOL_CALL tool=%s args=%s result_type=%s", tool_name, safe_args, type(result).__name__)
+    else:
+        logger.debug("TOOL_CALL tool=%s args=%s", tool_name, safe_args)
 
 
 def log_agent_thought(logger: logging.Logger, thought: str) -> None:
