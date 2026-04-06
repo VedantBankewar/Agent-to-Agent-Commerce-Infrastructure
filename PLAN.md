@@ -225,44 +225,61 @@ Returns `CompareResult` with `quotes_scored`, `winner`, `runner_up`.
 
 ---
 
-## Phase 6 — LangChain Prompts & Agent Skeletons
+## Phase 6 — LangChain Prompts & Agent Skeletons ✅ COMPLETED
 
 > **Why next:** The prompts encode all business rules. Without them, agents have no logic — they are just empty ReAct loops.
 
-### Step 6.1 — `agents/prompts/procurement.txt`
+**Period:** 2026-04-06
 
-- Role: procurement agent acting on behalf of an SME buyer
-- List of 4 available tools with usage instructions
-- Quote scoring formula embedded in the prompt
-- Decision rules: select winner, initiate escrow, handle edge cases
-- Hard constraint: never expose API keys or private keys in output
+### Files Created
 
-### Step 6.2 — `agents/prompts/supplier.txt`
+| Step | File | Status |
+|------|------|--------|
+| 6.1 | `agents/prompts/procurement.txt` | Done — 5,889 bytes, role + 4 tool descriptions + scoring formula + decision rules |
+| 6.2 | `agents/prompts/supplier.txt` | Done — 6,409 bytes, role + 4 tool descriptions + price floor + negotiation rules |
+| 6.3 | `agents/supplier_agent.py` | Done — 16,111 bytes, LangChain 1.x agent + poll/http modes |
+| 6.4 | `agents/procurement_agent.py` | Done — 21,249 bytes, LangChain 1.x agent + goal parser + pipeline |
 
-- Role: supplier agent acting on behalf of a seller business
-- List of 4 available tools with usage instructions
-- Price floor per product category (never quote below this)
-- Max 8% discount rule, 2-round negotiation limit
-- Meet-halfway rule on first counter, hold firm after
-- Quote validity window enforcement
+### LangChain 1.x API Discovery
 
-### Step 6.3 — `agents/supplier_agent.py`
+LangChain 1.2.14 uses a **completely rewritten agent API**:
 
-- LangChain ReAct agent initialized with `supplier.txt` system prompt
-- Attach all 4 supplier tools
-- `ConversationBufferMemory` for maintaining negotiation context across rounds
-- FastAPI HTTP server listening for incoming RFQ events
-- On receiving RFQ → run agent → respond with structured quote
+| Old API (LangChain 0.x) | New API (LangChain 1.x) |
+|------------------------|------------------------|
+| `create_react_agent()` | `create_agent()` from `langchain.agents` |
+| `AgentExecutor` | Returns `CompiledStateGraph` (LangGraph) |
+| `ConversationBufferMemory` | `MemorySaver` from `langgraph.checkpoint.memory`, passed as `checkpointer=` |
+| `{"input": "..."}` | `{"messages": [HumanMessage(...)]}` |
+| `Tool` from `langchain.tools` | `Tool` from `langchain_core.tools` |
 
-### Step 6.4 — `agents/procurement_agent.py`
+### Supplier Agent (`agents/supplier_agent.py`)
 
-- LangChain ReAct agent initialized with `procurement.txt` system prompt
-- Attach all 4 procurement tools
-- CLI interface accepting a natural-language goal string
-- Example input:
-  ```
-  "Buy 50 ergonomic chairs, budget 300000, by June 15"
-  ```
+- `create_supplier_agent(supplier_id)` → LangGraph `CompiledStateGraph`
+- `run_supplier_agent(supplier_id, poll_interval=10)` — marketplace polling loop
+- `start_rfq_server(supplier_id, port=8001)` — FastAPI HTTP webhook mode
+- `submit_quote_to_marketplace(...)` — POST quote to marketplace API
+- CLI: `python agents/supplier_agent.py --supplier-id <ID> --mode poll`
+
+### Procurement Agent (`agents/procurement_agent.py`)
+
+- `create_procurement_agent(buyer_agent_id)` → LangGraph `CompiledStateGraph`
+- `run_procurement_goal(buyer_agent_id, goal, max_retries=1)` — full pipeline
+- `parse_procurement_goal(goal)` — regex parser: natural-language → RFQ fields
+- CLI: `python agents/procurement_agent.py --agent-id <ID> --goal "Buy 50 chairs..."`
+
+### Bugs Fixed During Phase 6
+
+1. **Quantity regex fallback** — `(\d+)\s+\w` captured 1 char after number; "100 pens" matched as "100 p". Fixed to `(\d+)\s+\w+`.
+2. **ISO deadline parsing** — `group(1)` was `None` for ISO dates causing `AttributeError`. Fixed: detect via `group(1) is None`.
+
+### Verification Results (2026-04-06)
+
+- Both `.py` files: valid Python AST ✅
+- LangChain 1.x imports (`create_agent`, `MemorySaver`, `Tool`, `HumanMessage`, `RunnableConfig`) ✅
+- `procurement.txt`: all 4 tools + scoring weights (0.40/0.30/0.20/0.10) + decision rules ✅
+- `supplier.txt`: all 4 tools + price floor + 8% discount + 2-round limit + 30-min validity ✅
+- `parse_procurement_goal`: chairs, pens, desks, notebooks, ISO dates, defaults ✅
+- `create_*_agent`: raises `EnvironmentError` cleanly without API key ✅
 
 ---
 
@@ -327,22 +344,23 @@ Total files to build for MVP:
 ✅ tools/compare_quotes.py       (Phase 5.3)
 ✅ tools/sign_escrow.py          (Phase 5.4)
 
-□ agents/prompts/procurement.txt (Phase 6.1)
-□ agents/prompts/supplier.txt    (Phase 6.2)
-□ agents/supplier_agent.py       (Phase 6.3)
-□ agents/procurement_agent.py    (Phase 6.4)
+✅ agents/prompts/procurement.txt (Phase 6.1)
+✅ agents/prompts/supplier.txt    (Phase 6.2)
+✅ agents/supplier_agent.py       (Phase 6.3)
+✅ agents/procurement_agent.py    (Phase 6.4)
 
 □ demo.py                        (Phase 7.1)
 ```
 
-**Completed: 10 / 14 files.**
+**Completed: 14 / 14 files (all except demo.py).**
 
 ---
 
-## Known Issues (Post Phase 5)
+## Known Issues (Post Phase 6)
 
 - Redis not running — `redis_client.ping()` returns False (expected locally, not installed)
 - Buyer wallet (DDIIYCXZWOVIERH7CB5RS2CO2B2JVK2BF6GGVULLHKWPUMF2VEBP6Z2KG4) has 0 ALGO — needs faucet funding before on-chain contract calls
 - Python 3.13.7 — `hmac.compare_digest` required (not `hashlib.compare_digest`)
+- LangChain 1.2.14 API — `create_react_agent` + `AgentExecutor` removed; use `create_agent` + `MemorySaver` as shown above
 
 _Follow phases in order: 3 → 4 → 5 → 6 → 7 → 8_
