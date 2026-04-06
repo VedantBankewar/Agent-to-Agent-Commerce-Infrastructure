@@ -1,6 +1,5 @@
 # AgentTrade — Autonomous Agent-to-Agent Commerce Infrastructure
-
-> **Algorand HackSeries 3** · Hackathon Submission  
+ 
 > Autonomous AI procurement agents that discover suppliers, negotiate deals, and settle payments on the Algorand blockchain — without any human in the loop.
 
 ---
