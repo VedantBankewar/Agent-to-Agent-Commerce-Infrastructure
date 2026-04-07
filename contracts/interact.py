@@ -203,8 +203,9 @@ def build_lock_group_txn(
         on_complete = 0,   # NoOp
         app_args    = [
             b"lock",
-            deal_hash.encode("utf-8"),
-            deadline_ts.to_bytes(8, "big"),
+            seller_address.encode("utf-8"),   # args[1]: seller address string
+            deal_hash.encode("utf-8"),         # args[2]: deal hash
+            deadline_ts.to_bytes(8, "big"),    # args[3]: deadline
         ],
         # seller as accounts[1] — contract reads Txn.accounts[1]
         accounts = [seller_address],

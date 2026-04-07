@@ -51,3 +51,7 @@ Thumbs.db
 
 # Sessions
 .claude/sessions/
+
+addresses.txt
+show_addresses.py
+verify_output.txt

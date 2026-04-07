@@ -283,32 +283,63 @@ LangChain 1.2.14 uses a **completely rewritten agent API**:
 
 ---
 
-## Phase 7 — End-to-End Demo Orchestration
+## Phase 7 — End-to-End Demo Orchestration ✅ COMPLETED
 
 > **Why last:** Everything must be individually tested before wiring together for the hackathon demo.
 
-### Step 7.1 — `demo.py`
+**Period:** 2026-04-07
+
+### Steps Completed
+
+| Step | File | Status |
+|------|------|--------|
+| 7.1 | `demo.py` | Done — 460 lines, full pipeline orchestrator with ANSI-coloured output |
+| 7.2 | `utils/logger.py` integration | Done — all tools already write to `logs/`, logger respects DEBUG/INFO levels, sensitive keys scrubbed |
+
+### `demo.py` Architecture
 
 One-command runner that orchestrates the full demo:
 
-- Initialize SQLite DB and seed supplier data
-- Deploy escrow smart contract to Algorand Testnet (if not already deployed)
-- Start supplier agent HTTP servers on separate ports
-- Start the marketplace API via uvicorn
-- Spawn the procurement agent with a goal from the CLI argument
-- Poll Redis and the marketplace API for RFQ responses
-- Print a live transaction trail to the terminal:
-  ```
-  RFQ sent → Quotes received → Escrow locked → Delivered → Payment released
-  ```
+```
+python demo.py --goal "Buy 50 ergonomic chairs, budget 300000, by June 15"
+python demo.py --skip-marketplace  (SQLite fallback only)
+```
 
-### Step 7.2 — `utils/logger.py` integration
+**Pipeline steps:**
 
-- Ensure all tools write logs to the `logs/` directory
-- Log levels:
-  - `DEBUG` — tool arguments and raw results
-  - `INFO` — milestones (RFQ sent, quote received, escrow locked, etc.)
-- Hard constraint: never log private keys or API keys at any level
+1. **Prerequisites check** — `.env` loaded, API key verified, escrow config found, Redis status reported
+2. **DB init + seed** — `init_db()` creates tables, `seed()` inserts FurniCo/ChairHub/OfficePro (idempotent)
+3. **Buyer agent registration** — creates `demo-buyer-agent` in agents table with fresh wallet (idempotent)
+4. **Escrow verify** — queries on-chain state of App ID 758338449 via `get_escrow_state()`
+5. **Marketplace API** — spawns `uvicorn marketplace.registry:app` as background subprocess, polls `/health`
+6. **Goal parsing** — `parse_procurement_goal()` → structured RFQ fields
+7. **Supplier search** — `search_suppliers(category)` via API (or SQLite fallback)
+8. **RFQ broadcast** — `send_rfq()` creates RFQ in DB
+9. **Supplier quote bots** — direct `calculate_quote()` calls for each matching supplier → INSERT into quotes table (deterministic, no LLM required)
+10. **Quote scoring** — `compare_quotes(rfq_id)` with weighted multi-criteria formula
+11. **Winner selection** — prints top scorer with score breakdown
+12. **Escrow lock** — `sign_escrow()` attempts on-chain lock; gracefully handles insufficient funds
+13. **Transaction trail** — coloured summary of full lifecycle
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Inline pipeline steps (not `run_procurement_goal`) | Print live milestones between each step |
+| Supplier quote bots (direct tool calls) | Deterministic, no LLM latency, no Redis required |
+| Marketplace as subprocess | Real HTTP server so API-first path works for `search_suppliers`, `send_rfq` |
+| Graceful escrow failure | Buyer wallet has 0 ALGO — demo prints partial success + funding instructions |
+| `--skip-marketplace` flag | Quick testing with SQLite fallback only |
+| `atexit` + `SIGINT` handler | Clean subprocess termination on Ctrl+C or exit |
+
+### Verification Results (2026-04-07)
+
+- `python demo.py --skip-marketplace` → exit code 0 ✅
+- `python demo.py` (with marketplace) → exit code 0 ✅
+- DB state after demo: 3 suppliers, 2 agents (demo-buyer-agent + test), RFQs + quotes created ✅
+- Escrow lock: fails gracefully with "buyer wallet has insufficient ALGO" (expected — 0 balance) ✅
+- Marketplace subprocess starts and responds to `/health` within 5s ✅
+- Marketplace subprocess terminates cleanly on exit ✅
 
 ---
 
@@ -349,18 +380,18 @@ Total files to build for MVP:
 ✅ agents/supplier_agent.py       (Phase 6.3)
 ✅ agents/procurement_agent.py    (Phase 6.4)
 
-□ demo.py                        (Phase 7.1)
+✅ demo.py                        (Phase 7.1)
 ```
 
-**Completed: 14 / 14 files (all except demo.py).**
+**Completed: 15 / 15 files — all MVP files built.**
 
 ---
 
-## Known Issues (Post Phase 6)
+## Known Issues (Post Phase 7)
 
 - Redis not running — `redis_client.ping()` returns False (expected locally, not installed)
-- Buyer wallet (DDIIYCXZWOVIERH7CB5RS2CO2B2JVK2BF6GGVULLHKWPUMF2VEBP6Z2KG4) has 0 ALGO — needs faucet funding before on-chain contract calls
+- Demo buyer wallet has 0 ALGO — escrow lock fails gracefully with "insufficient funds"; fund via Algorand Testnet dispenser
 - Python 3.13.7 — `hmac.compare_digest` required (not `hashlib.compare_digest`)
-- LangChain 1.2.14 API — `create_react_agent` + `AgentExecutor` removed; use `create_agent` + `MemorySaver` as shown above
+- LangChain 1.2.14 API — `create_react_agent` + `AgentExecutor` removed; use `create_agent` + `MemorySaver`
 
-_Follow phases in order: 3 → 4 → 5 → 6 → 7 → 8_
+_All phases complete except Phase 8 (Testing & Polish): 1 ✅ → 2 ✅ → 3 ✅ → 4 ✅ → 5 ✅ → 6 ✅ → 7 ✅ → 8 □_
