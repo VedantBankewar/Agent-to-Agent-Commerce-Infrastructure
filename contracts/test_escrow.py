@@ -113,6 +113,7 @@ def test_lock_deliver_release(client: AlgodClient, app_id: int, buyer_sk: bytes,
     release = ApplicationCallTxn(
         sender=buyer_addr, sp=sp3, index=app_id, on_complete=0,
         app_args=[b"release"],
+        accounts=[seller_addr],  # AVM needs seller in accounts for inner-txn
     )
     txid3 = client.send_transaction(release.sign(buyer_sk))
     wait_for_confirmation(client, txid3, 30)
@@ -163,6 +164,7 @@ def test_refund(client: AlgodClient, app_id: int, buyer_sk: bytes, buyer_addr: s
     refund = ApplicationCallTxn(
         sender=buyer_addr, sp=sp2, index=app_id, on_complete=0,
         app_args=[b"refund"],
+        accounts=[buyer_addr],  # AVM needs buyer in accounts for inner-txn
     )
     txid2 = client.send_transaction(refund.sign(buyer_sk))
     wait_for_confirmation(client, txid2, 30)

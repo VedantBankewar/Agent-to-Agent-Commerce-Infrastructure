@@ -343,17 +343,17 @@ python demo.py --skip-marketplace  (SQLite fallback only)
 
 ---
 
-## Phase 8 — Testing & Polish
+## Phase 8 — Testing & Polish ✅ COMPLETED
 
-> Run these in order. Do not submit without completing Step 8.4.
+> All tests pass. Step 8.4 verified end-to-end flow.
 
-| Step | Test                         | What to verify                                                   |
-| ---- | ---------------------------- | ---------------------------------------------------------------- |
-| 8.1  | `contracts/test_escrow.py`   | Fund buyer wallet on Testnet, lock and release escrow end-to-end |
-| 8.2  | Quote scoring unit test      | Known inputs → expected scores match formula exactly             |
-| 8.3  | Negotiation round limit test | Send 3 counter-offers → verify rejection triggers at round 3     |
-| 8.4  | Full dry run                 | RFQ → quotes → escrow lock → delivery proof → payment release    |
-| 8.5  | README polish                | Ensure demo instructions match actual `demo.py` output           |
+| Step | Test                         | Status |
+| ---- | ---------------------------- | ------ |
+| 8.1  | `contracts/test_escrow.py`   | ✅ Done |
+| 8.2  | Quote scoring unit test      | ✅ Done |
+| 8.3  | Negotiation round limit test | ✅ Done |
+| 8.4  | Full dry run                 | ✅ Done |
+| 8.5  | README polish                | ✅ Done |
 
 ---
 
@@ -394,4 +394,4 @@ Total files to build for MVP:
 - Python 3.13.7 — `hmac.compare_digest` required (not `hashlib.compare_digest`)
 - LangChain 1.2.14 API — `create_react_agent` + `AgentExecutor` removed; use `create_agent` + `MemorySaver`
 
-_All phases complete except Phase 8 (Testing & Polish): 1 ✅ → 2 ✅ → 3 ✅ → 4 ✅ → 5 ✅ → 6 ✅ → 7 ✅ → 8 □_
+_All phases complete: 1 ✅ → 2 ✅ → 3 ✅ → 4 ✅ → 5 ✅ → 6 ✅ → 7 ✅ → 8 ✅_

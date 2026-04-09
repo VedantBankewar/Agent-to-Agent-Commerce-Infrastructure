@@ -535,66 +535,96 @@ cp .env.example .env
 
 ```bash
 # Initialize the SQLite database and seed supplier data
-python db/schema.sql
+# (This happens automatically in demo.py, but you can run them manually)
+python -c "from db.initializedb import init_db; init_db('db/hackathon.db')"
 python marketplace/seed_data.py
 
 # Deploy the escrow smart contract to Algorand Testnet
 python contracts/deploy.py
 
-# Generate wallets for both agents (saves to .env)
-python utils/wallet.py --create-all
-
-# Fund agent wallets with Testnet ALGO (free faucet)
+# Your .env ALGORAND_CREATOR_MNEMONIC will be used for deploying and funding.
+# Ensure the creator wallet has sufficient ALGO.
 # Visit: https://bank.testnet.algorand.network/
 ```
 
 ### Run the demo
 
+AgentTrade provides a single-command orchestrator that handles everything—from starting the marketplace to generating supplier quotes to executing the on-chain trade.
+
 ```bash
-# Terminal 1 — Start the supplier agents
-python agents/supplier_agent.py --agent-id SUP_042
-python agents/supplier_agent.py --agent-id SUP_017
+# Run the full end-to-end demo orchestration
+python demo.py --goal "Buy 50 ergonomic chairs, budget 10, by June 15"
+```
 
-# Terminal 2 — Start the marketplace registry
-uvicorn marketplace.registry:app --port 8000
+If you don't have Redis installed, you can skip the marketplace service entirely:
 
-# Terminal 3 — Run the full end-to-end demo
-python demo.py --goal "Buy 50 ergonomic chairs, budget 300000, by 2025-06-15"
+```bash
+python demo.py --goal "Buy 50 ergonomic chairs, budget 10, by June 15" --skip-marketplace
 ```
 
 ### What you will see
 
+The orchestrator provides a beautiful pipeline view of autonomous commerce:
+
 ```
-[PROC] Thought: I need to find ergonomic chair suppliers first.
-[PROC] Action: search_suppliers → {"category": "office furniture", "max_price": 3000}
-[PROC] Observation: Found 3 suppliers — SUP_042 (4.8★), SUP_017 (4.2★), SUP_089 (4.6★)
+════════════════════════════════════════════════════════════
+  AGENTTRADE — DEMO STARTUP
+════════════════════════════════════════════════════════════
+  ✓  ANTHROPIC_API_KEY set
+  ✓  Escrow contract deployed — App ID: 758565388
+  ✓  Database ready — 6 tables: agents, deals, inventory...
+  ✓  Escrow live — App ID: 758565388 | State: IDLE
 
-[PROC] Thought: Sending RFQ to top 2 suppliers.
-[PROC] Action: send_rfq → RFQ_991 broadcast. Waiting 30s for quotes...
+════════════════════════════════════════════════════════════
+  PROCUREMENT PIPELINE
+════════════════════════════════════════════════════════════
+  🎯  Goal parsed
+      item: chair
+      quantity: 50
+      budget: 10 ALGO
+      deadline: 2026-06-15
 
-[SUP_042] Received RFQ_991. Checking inventory...
-[SUP_042] Stock: 120 units available. Calculating quote...
-[SUP_042] Quote sent: ₹2,750/unit, 10 days, 2yr warranty
+  📡  Supplier search — 2 found
+      • FurniCo  (rating 4.7  base $0.1  lead 14d)
+      • ChairHub  (rating 4.2  base $0.08  lead 7d)
 
-[SUP_017] Received RFQ_991. Checking inventory...
-[SUP_017] Quote sent: ₹2,500/unit, 18 days, 1yr warranty
+  📤  RFQ broadcast to supplier network
+      rfq_id: 24b44438-4d7...
 
-[PROC] Scoring quotes...
-  SUP_042 (FurniCo):  87.4 ✓ WINNER
-  SUP_017 (ChairHub): 70.0
+  🤖  Supplier agents generating quotes...
+    💬  FurniCo quoted $0.12/unit  |  14d delivery  |  3.0yr warranty
+    💬  ChairHub quoted $0.09/unit  |  7d delivery  |  2.0yr warranty
 
-[PROC] Action: sign_and_lock_escrow → SUP_042 | ₹1,37,500 (4,120 ALGO)
-[ALGO] Escrow locked. Txn: ABCDE... | Deal hash: sha256:abc123...
-[ALGO] Contract state: LOCKED
+  📊  Quotes scored — 2 evaluated
+      👑 ChairHub: score=94.5  |  $0.09/unit  |  7d  |  2.0yr
 
-[SUP_042] Order confirmed. Dispatching goods...
-[SUP_042] Action: submit_delivery_proof → hash: sha256:def456...
-[ALGO] Delivery proof anchored. Txn: FGHIJ...
-[ALGO] Contract state: DELIVERED → releasing payment...
-[ALGO] Payment released to SUP_042 wallet. Txn: KLMNO...
-[ALGO] Contract state: COMPLETED ✓
+  🏆  Winner: ChairHub
+      score: 94.5
+      total: $4.72
 
-View full audit trail: https://testnet.algoexplorer.io/address/ESC_XYZ...
+  🔐  Locking escrow on Algorand Testnet...
+  ✓  Escrow LOCKED on Algorand Testnet
+    🔗  On-chain details
+      deal_id: 0e75d840-b56...
+      deal_hash: sha256:a7276127e3...
+      txid: NYY7N6FPPXDPFGVOD52YLM...
+
+════════════════════════════════════════════════════════════
+  AGENTTRADE — TRANSACTION TRAIL
+════════════════════════════════════════════════════════════
+  Goal:   Buy 50 ergonomic chairs, budget 10, by June 15
+  Status: SUCCESS
+
+  [1]  RFQ Broadcast
+       rfq_id=24b44438-4d7...  item=chair  qty=50
+  [2]  Quotes Scored
+       winner=ChairHub  price=$0.09/unit
+  [3]  Deal Agreed
+       total=$4.72  delivery=7d  warranty=2.0yr
+  [4]  Escrow LOCKED ✅
+       txid=NYY7N6FPPX...  round=62250731  app=758565388
+
+  Escrow:  LMRXZ5KWMSJNJYX3Z5PCDKTWYVAL...
 ```
 
 ---

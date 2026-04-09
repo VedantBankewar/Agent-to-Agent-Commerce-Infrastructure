@@ -241,9 +241,26 @@ def build_release_txn(
     caller_address: str,
     caller_sk:      bytes,
     app_id:         int,
+    seller_address: str = "",
 ):
-    """Single AppCall for release_payment (permissionless after DELIVERED)."""
+    """Single AppCall for release_payment (permissionless after DELIVERED).
+
+    The seller address must be passed in accounts[] so the AVM can resolve
+    the inner-transaction receiver from global state.
+    """
     sp = client.suggested_params()
+
+    # If seller_address not provided, try to read it from on-chain state
+    accounts = []
+    if seller_address:
+        accounts = [seller_address]
+    else:
+        try:
+            state = get_escrow_state(client, app_id)
+            if state.seller:
+                accounts = [state.seller]
+        except Exception:
+            pass
 
     txn = ApplicationCallTxn(
         sender      = caller_address,
@@ -251,6 +268,7 @@ def build_release_txn(
         index       = app_id,
         on_complete = 0,
         app_args    = [b"release"],
+        accounts    = accounts,
     )
     return txn.sign(caller_sk)
 
@@ -261,7 +279,11 @@ def build_refund_txn(
     buyer_sk:     bytes,
     app_id:        int,
 ):
-    """Single AppCall for claim_refund (buyer only, after deadline)."""
+    """Single AppCall for claim_refund (buyer only, after deadline).
+
+    Buyer address is already the sender and is auto-available to the AVM,
+    but we also add it to accounts[] for the inner-txn receiver resolution.
+    """
     sp = client.suggested_params()
 
     txn = ApplicationCallTxn(
@@ -270,6 +292,7 @@ def build_refund_txn(
         index       = app_id,
         on_complete = 0,
         app_args    = [b"refund"],
+        accounts    = [buyer_address],
     )
     return txn.sign(buyer_sk)
 
@@ -331,9 +354,10 @@ def release_payment(
     caller_address: str,
     caller_sk:      bytes,
     app_id:         int,
+    seller_address: str = "",
 ) -> dict:
     """Release payment to seller: sign + send + wait."""
-    signed_txn = build_release_txn(client, caller_address, caller_sk, app_id)
+    signed_txn = build_release_txn(client, caller_address, caller_sk, app_id, seller_address)
     txid = client.send_transaction(signed_txn)
     result = wait_for_txn(client, txid)
 
