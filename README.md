@@ -1,5 +1,5 @@
 # AgentTrade — Autonomous Agent-to-Agent Commerce Infrastructure
- 
+
 > Autonomous AI procurement agents that discover suppliers, negotiate deals, and settle payments on the Algorand blockchain — without any human in the loop.
 
 ---
@@ -61,7 +61,7 @@ SME Business Goal
 "Buy 50 ergonomic chairs, budget ₹3 lakh, by June 15"
         │
         ▼
-┌─────────────────────┐        Negotiate terms        ┌─────────────────────┐
+┌─────────────────────┐        Negotiate terms         ┌─────────────────────┐
 │  Procurement Agent  │ ◄────────────────────────────► │   Supplier Agent    │
 │  (Buyer's Robot)    │   RFQ → Quotes → Counter-offer │  (Seller's Robot)   │
 │  LangChain + LLM    │                                │  LangChain + LLM    │
@@ -70,8 +70,8 @@ SME Business Goal
           │  Deal agreed — lock payment                           │
           ▼                                                       │
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        Algorand Blockchain                                   │
-│                                                                              │
+│                        Algorand Blockchain                                  │
+│                                                                             │
 │   ┌──────────────────────────────┐                                          │
 │   │   Escrow Smart Contract      │  ← Payment locked here                   │
 │   │   Locks ALGO until delivery  │  ← Delivery proof submitted here         │
