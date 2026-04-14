@@ -46,8 +46,16 @@ def get_db() -> sqlite3.Connection:
 
 
 def dict_from_row(row: sqlite3.Row) -> dict[str, Any]:
-    """Convert a sqlite3.Row to a dict."""
-    return dict(row)
+    """Convert a sqlite3.Row to a dict, parsing JSON strings where needed."""
+    d = dict(row)
+    # Parse metadata JSON string to dict
+    if "metadata" in d and d["metadata"] is not None:
+        if isinstance(d["metadata"], str):
+            try:
+                d["metadata"] = json.loads(d["metadata"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +429,95 @@ def update_rfq_status(rfq_id: str, status: str) -> dict[str, Any]:
     conn.close()
 
     return {"rfq_id": rfq_id, "status": status}
+
+
+# ---------------------------------------------------------------------------
+# Deal endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/deals", response_model=list[dict[str, Any]])
+def list_deals(
+    status: str | None = None,
+    buyer_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """List all deals, optionally filtered by status or buyer."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = "SELECT * FROM deals WHERE 1=1"
+    params: list[Any] = []
+
+    if status:
+        query += " AND status = ?"
+        params.append(status)
+    if buyer_id:
+        query += " AND buyer_id = ?"
+        params.append(buyer_id)
+
+    query += " ORDER BY created_at DESC"
+
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict_from_row(row) for row in rows]
+
+
+@app.get("/deals/{deal_id}", response_model=dict[str, Any])
+def get_deal(deal_id: str) -> dict[str, Any]:
+    """Get a single deal by ID."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM deals WHERE deal_id = ?", (deal_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    return dict_from_row(row)
+
+
+@app.patch("/deals/{deal_id}/status")
+def update_deal_status(deal_id: str, status: str) -> dict[str, Any]:
+    """Update deal status."""
+    valid = {"delivered", "completed", "refunded", "disputed"}
+    if status not in valid:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT deal_id, status FROM deals WHERE deal_id = ?", (deal_id,))
+    row = cursor.fetchone()
+    if row is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    fields = ["status = ?"]
+    params: list[Any] = [status]
+
+    if status == "delivered":
+        fields.append("delivered_at = ?")
+        params.append(now)
+    elif status == "completed":
+        fields.append("completed_at = ?")
+        params.append(now)
+
+    params.extend([deal_id])
+    query = f"UPDATE deals SET {', '.join(fields)} WHERE deal_id = ?"
+    cursor.execute(query, params)
+    conn.commit()
+    conn.close()
+
+    return {"deal_id": deal_id, "status": status}
+
+
+# ---------------------------------------------------------------------------
+# Pipeline router
+# ---------------------------------------------------------------------------
+from marketplace.pipeline import router as pipeline_router
+app.include_router(pipeline_router)
 
 
 # ---------------------------------------------------------------------------
