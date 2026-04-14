@@ -22,10 +22,9 @@ SUPPLIERS = [
     {
         "name": "FurniCo",
         "category": "furniture",
-        "wallet_addr": "JCIZ5L4RIEGM3OYP34PIXHPBY2PCFDDZAM3IVT4SDDLTBGKFPBVZM3FX4M",
         "rating": 4.7,
-        "min_price": 0.12,
-        "base_cost": 0.10,
+        "min_price": 0.025,
+        "base_cost": 0.020,
         "margin_pct": 20.0,
         "lead_days": 14,
         "warranty_yrs": 3.0,
@@ -37,10 +36,9 @@ SUPPLIERS = [
     {
         "name": "ChairHub",
         "category": "furniture",
-        "wallet_addr": "BDJ26EX4JP6CJVH5JZR3HC62N6FUFP7WUS4GTV3JP7ATHSS2YOACFQRILI",
         "rating": 4.2,
-        "min_price": 0.10,
-        "base_cost": 0.08,
+        "min_price": 0.020,
+        "base_cost": 0.018,
         "margin_pct": 18.0,
         "lead_days": 7,
         "warranty_yrs": 2.0,
@@ -52,10 +50,9 @@ SUPPLIERS = [
     {
         "name": "OfficePro",
         "category": "office_supplies",
-        "wallet_addr": "QLU3XHTIW3BLNJPNUDZLPTUTN6SI43ADF3HWY4QXFUMYZGEO5YJ4H4R2OM",
         "rating": 4.5,
-        "min_price": 0.05,
-        "base_cost": 0.03,
+        "min_price": 0.005,
+        "base_cost": 0.003,
         "margin_pct": 25.0,
         "lead_days": 3,
         "warranty_yrs": 1.0,
@@ -69,12 +66,24 @@ SUPPLIERS = [
 
 def seed() -> list[dict]:
     """Insert all sample suppliers and return their records."""
+    from utils.wallet import Wallet, save_wallet, fund_wallet_from_faucet
+    
     results = []
     for data in SUPPLIERS:
         try:
-            record = create_supplier(data)
+            # Generate a new wallet for the supplier
+            wallet = Wallet.generate()
+            data["wallet_addr"] = wallet.address
+            
+            from marketplace.registry import SupplierCreate
+            record = create_supplier(SupplierCreate(**data))
+            
+            # Save the wallet dynamically
+            supplier_id = record['supplier_id']
+            save_wallet(supplier_id, wallet)
+            
             results.append(record)
-            print(f"  Seeded: {record['name']} ({record['supplier_id'][:8]}...)")
+            print(f"  Seeded: {record['name']} ({record['supplier_id'][:8]}...) with wallet {wallet.address[:8]}...")
         except Exception as e:
             print(f"  Warning: {data['name']} skipped — {e}", file=sys.stderr)
     return results

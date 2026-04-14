@@ -1,6 +1,6 @@
 # AgentTrade — Autonomous Agent-to-Agent Commerce Infrastructure
 
-> Autonomous AI procurement agents that discover suppliers, negotiate deals, and settle payments on the Algorand blockchain — without any human in the loop.
+> Autonomous AI procurement agents that discover suppliers, negotiate deals, and settle payments on the Algorand blockchain — without any human in the loop.    
 
 ---
 
@@ -547,19 +547,27 @@ python contracts/deploy.py
 # Visit: https://bank.testnet.algorand.network/
 ```
 
-### Run the demo
+### 4. Run the full End-to-End Pipeline
 
-AgentTrade provides a single-command orchestrator that handles everything—from starting the marketplace to generating supplier quotes to executing the on-chain trade.
+AgentTrade provides an end-to-end orchestration flow that handles everything—from starting the marketplace to generating supplier quotes, locking the on-chain trade, and subsequently completing delivery.
+
+Because the underlying Escrow smart contract is a singleton instance (locks only once), you must execute these three separate scripts to perform a clean Testnet pipeline run:
 
 ```bash
-# Run the full end-to-end demo orchestration
-python demo.py --goal "Buy 50 ergonomic chairs, budget 10, by June 15"
+# 1. Start with a clean contract state
+python contracts/deploy.py
+
+# 2. Negotiate, Purchase, and Lock Escrow (Wipe the DB first as a safeguard)
+Remove-Item db/hackathon.db; python demo.py --goal "Buy 5 ergonomic chairs, budget 0.20, by June 15"
+
+# 3. Simulate Delivery & Auto-Release Escrow Funds to Supplier
+python release_funds.py
 ```
 
-If you don't have Redis installed, you can skip the marketplace service entirely:
+If you don't have Redis installed, you can skip the marketplace background service flag during step 2:
 
 ```bash
-python demo.py --goal "Buy 50 ergonomic chairs, budget 10, by June 15" --skip-marketplace
+Remove-Item db/hackathon.db; python demo.py --goal "Buy 5 ergonomic chairs, budget 0.20, by June 15" --skip-marketplace
 ```
 
 ### What you will see
@@ -621,10 +629,34 @@ The orchestrator provides a beautiful pipeline view of autonomous commerce:
        winner=ChairHub  price=$0.09/unit
   [3]  Deal Agreed
        total=$4.72  delivery=7d  warranty=2.0yr
-  [4]  Escrow LOCKED ✅
-       txid=NYY7N6FPPX...  round=62250731  app=758565388
+  Deal Hash:  sha256:ef24210f7afd5280ca3b45917bd2a04ff98978a69ed6fa9400d7112413956455
+  Buyer:      75FBJ62IDIZ6RHYN7IHG4RP2KV3KS7B3XN3UQVOC63WVIDELHTYIBCA2IE
+  Escrow:     X66VDA5DNDV7EIUKEF2H4RUCBMYIVZY2F2AWBNAD443LFHEWTLPJERRZ2U
+  Supplier:   3MI4WW2MQFE473E4G3IPOKM6YT7IKOYUK5VR22QA4AWYM2RCA4OUIWRDUU
+```
 
-  Escrow:  LMRXZ5KWMSJNJYX3Z5PCDKTWYVAL...
+Executing `python release_funds.py` completes the post-negotiation workflow by finalizing the on-chain logic:
+
+```
+[1] Finding locked deal...
+    Found deal_id: 00a7aea8-8255-4bb5-9cf2-3946fb1248d5
+
+[2] Generating mock delivery proof...
+    Saved delivery proof to delivery\00a7aea8-8255-4bb5-9cf2-3946fb1248d5.json
+
+[2.5] Funding supplier wallet from deployer...
+    Supplier wallet funded for transactions.
+
+[3] Submitting delivery proof on-chain (contract -> DELIVERED)...
+    txid: OJ346KZNGIQ2VJ2UI556VTNLFBNMCTDKDDY4GIMSAOJN5D3AC6NQ
+    proof_hash: sha256:963cc52ff40f2433db80a660c489adf32201826ed19650646b0989b9ba61d8df
+
+[4] Releasing payment on-chain (contract -> COMPLETED)...
+    Payment released! txid: LB4NEEHUBRURL4GMFQQRG2QKX2O56HX6J2NA7HSU6UPVSLRAOCOQ
+
+[5] Database updated. Deal 00a7aea8-8255-4bb5-9cf2-3946fb1248d5 is COMPLETED.
+
+Successfully released escrow funds to the supplier!
 ```
 
 ---

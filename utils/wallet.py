@@ -179,7 +179,7 @@ def sign_and_send_txn(
     )
 
     signed_txn = unsigned_txn.sign(wallet.private_key)
-    tx_id = client.send_transactions(signed_txn)
+    tx_id = client.send_transaction(signed_txn)
     result = wait_for_confirmation(client, tx_id, 10)
     return result
 

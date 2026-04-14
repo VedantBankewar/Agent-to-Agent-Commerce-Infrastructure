@@ -207,6 +207,15 @@ def ensure_buyer_agent() -> None:
 
     save_wallet(BUYER_AGENT_ID, wallet)
     ok(f"Buyer agent registered — {BUYER_AGENT_ID} | {wallet.address[:16]}...")
+    
+    # Fund the buyer agent from deployer wallet
+    try:
+        from utils.wallet import load_wallet, sign_and_send_txn
+        deployer = load_wallet("deployer")
+        print(f"    Funding buyer {wallet.address[:8]}... from deployer wallet...")
+        sign_and_send_txn(deployer, wallet.address, 500000, note="Buyer demo funding")
+    except Exception as e:
+        warn(f"Failed to fund buyer from deployer: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -564,6 +573,9 @@ def run_procurement_pipeline(goal: str) -> dict[str, Any] | None:
             app_id=escrow_result.app_id,
         )
 
+        buyer_w = load_wallet(BUYER_AGENT_ID)
+        supp_w = load_wallet(winner.supplier_id)
+
         return {
             "status":          "success",
             "rfq_id":          rfq_id,
@@ -577,20 +589,18 @@ def run_procurement_pipeline(goal: str) -> dict[str, Any] | None:
             "delivery_days":   winner.delivery_days,
             "warranty_yrs":    winner.warranty_yrs,
             "deal_hash":       escrow_result.deal_hash,
+            "buyer_address":   buyer_w.address if buyer_w else None,
             "escrow_address":  escrow_result.escrow_address,
+            "supplier_address": supp_w.address if supp_w else None,
             "app_id":          escrow_result.app_id,
             "txid":            escrow_result.txid,
             "confirmed_round": escrow_result.confirmed_round,
         }
 
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         error_msg = str(exc).lower()
-
-        if "overspend" in error_msg or "insufficient" in error_msg:
-            warn("Escrow lock failed — buyer wallet has insufficient ALGO")
-            warn("Fund the wallet via Algorand Testnet dispenser to complete on-chain")
-        else:
-            warn(f"Escrow lock failed: {str(exc)[:120]}")
 
         # Return partial success — everything except the on-chain lock succeeded
         return {
@@ -668,8 +678,12 @@ def print_transaction_trail(result: dict[str, Any], goal: str) -> None:
 
     if result.get("deal_hash"):
         print(f"  {MAGENTA}Deal Hash:{RESET}  {result['deal_hash']}")
+    if result.get("buyer_address"):
+        print(f"  {MAGENTA}Buyer:{RESET}      {result['buyer_address']}")
     if result.get("escrow_address"):
         print(f"  {MAGENTA}Escrow:{RESET}     {result['escrow_address']}")
+    if result.get("supplier_address"):
+        print(f"  {MAGENTA}Supplier:{RESET}   {result['supplier_address']}")
 
     print(f"\n  {BOLD}{'═' * 56}{RESET}")
     print(f"  {DIM}Demo powered by Algorand × LangChain × AgentTrade{RESET}\n")

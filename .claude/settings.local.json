@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm list:*)"
+      "Bash(npm list:*)",
+      "Read(//d/Agent-To-Agent Commerce Infrastructure/agenttrade-web/**)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(rm -f src/App.css)",
+      "Bash(rm -f src/assets/react.svg)",
+      "Bash(rm -f src/assets/vite.svg)",
+      "Bash(rm -f src/assets/hero.png)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:5173)"
     ]
   },
   "enabledMcpjsonServers": [
