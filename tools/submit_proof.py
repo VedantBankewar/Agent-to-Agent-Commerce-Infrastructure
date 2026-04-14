@@ -139,11 +139,10 @@ def submit_proof(
         """
         UPDATE deals
         SET status       = 'delivered',
-            proof_hash   = ?,
             delivered_at = ?
         WHERE deal_id = ?
         """,
-        (proof_hash, now, deal_id),
+        (now, deal_id),
     )
     conn.commit()
     conn.close()
