@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -195,10 +195,10 @@ def create_supplier_agent(supplier_id: str) -> Any:
     tools = _build_tools()
     checkpointer = MemorySaver()
 
-    agent = create_agent(
+    agent = create_react_agent(
         model=_get_llm(),
         tools=tools,
-        system_prompt=system_prompt,
+        state_modifier=system_prompt,
         checkpointer=checkpointer,
     )
 

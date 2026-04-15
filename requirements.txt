@@ -4,7 +4,9 @@
 # AI / Agent Layer
 langchain>=0.3.0
 langchain-anthropic>=0.3.0
+langchain-openai>=0.3.0
 langchain-core>=0.3.0
+langgraph>=0.2.0
 
 # Blockchain Layer
 algokit>=2.0.0
