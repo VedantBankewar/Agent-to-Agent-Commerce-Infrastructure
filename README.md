@@ -130,7 +130,7 @@ The MVP demonstrates the **complete end-to-end procurement and settlement loop**
 | Deal Hash Anchoring   | SHA-256 of agreement anchored in Algorand note field                     |
 | Delivery Proof        | Simulated delivery proof submission triggering escrow release            |
 | Agent Reasoning Log   | LangChain verbose trace saved to log files for demo visibility           |
-| Simple Dashboard      | CLI or minimal web UI showing live transaction trail                     |
+| Cinematic Dashboard   | High-fidelity autonomous UI with real-time pipeline and bidding comparison |
 
 ### What is OUT of the MVP (future roadmap)
 
@@ -142,7 +142,6 @@ The MVP demonstrates the **complete end-to-end procurement and settlement loop**
 | Production PostgreSQL             | SQLite handles hackathon load                                 |
 | Agent reputation system           | Placeholder ratings in DB                                     |
 | Stablecoin payments               | ALGO sufficient for demo; ASA tokens are a production upgrade |
-| Web frontend                      | CLI demo is faster to build and equally impressive            |
 
 ---
 
@@ -518,6 +517,7 @@ AgentTrade/
 ### Prerequisites
 
 - Python 3.11+
+- Node.js & npm (for the cinematic dashboard)
 - Redis (local or Docker)
 - Algorand Testnet access (free — no signup needed)
 
@@ -549,7 +549,26 @@ python contracts/deploy.py
 
 ### 4. Run the full End-to-End Pipeline
 
-AgentTrade provides an end-to-end orchestration flow that handles everything—from starting the marketplace to generating supplier quotes, locking the on-chain trade, and subsequently completing delivery.
+AgentTrade provides both a visual dashboard and a CLI orchestration flow.
+
+#### A. Launch the Cinematic Dashboard (Recommended)
+
+1. **Start the Backend APIs**:
+   ```bash
+   # Launch the marketplace registry and event streamer
+   uvicorn server:app --port 8000 --reload
+   ```
+
+2. **Launch the Frontend**:
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+3. **Interact**: Open `http://localhost:5173` to see the autonomous pipeline. Enter a goal like *"Buy 5 ergonomic chairs"* and watch the agent navigate discovery, negotiation, and settlement.
+
+#### B. CLI-only Pipeline
 
 Because the underlying Escrow smart contract is a singleton instance (locks only once), you must execute these three separate scripts to perform a clean Testnet pipeline run:
 
