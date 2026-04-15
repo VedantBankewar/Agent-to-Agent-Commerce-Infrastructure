@@ -19,6 +19,7 @@ from algosdk.transaction import (
     StateSchema,
     wait_for_confirmation,
     assign_group_id,
+    OnComplete,
 )
 from algosdk import encoding
 
@@ -385,6 +386,31 @@ def claim_refund(
         "app_id":    app_id,
     }
 
+
+def delete_app(
+    client:          AlgodClient,
+    creator_address: str,
+    creator_sk:      bytes,
+    app_id:          int,
+) -> dict:
+    """Delete the application and reclaim its MBR back to the creator."""
+    sp = client.suggested_params()
+
+    txn = ApplicationCallTxn(
+        sender      = creator_address,
+        sp          = sp,
+        index       = app_id,
+        on_complete = OnComplete.DeleteApplicationOC,
+        app_args    = [],
+    )
+    signed = txn.sign(creator_sk)
+    txid = client.send_transaction(signed)
+    result = wait_for_txn(client, txid)
+
+    return {
+        "txid":      txid,
+        "confirmed": result.get("confirmed-round", 0),
+    }
 
 # ---------------------------------------------------------------------------
 # Config file helpers

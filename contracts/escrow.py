@@ -140,7 +140,9 @@ def approval_program():
                 Return(is_creator())],
             [Txn.on_completion() == OnComplete.DeleteApplication,
                 Return(And(is_creator(),
-                           Or(state_is(STATE_IDLE), state_is(STATE_REFUNDED))))],
+                           Or(state_is(STATE_IDLE), 
+                              state_is(STATE_COMPLETED),
+                              state_is(STATE_REFUNDED))))],
         ),
         Return(Int(0)),
     )

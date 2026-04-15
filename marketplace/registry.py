@@ -514,13 +514,6 @@ def update_deal_status(deal_id: str, status: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Pipeline router
-# ---------------------------------------------------------------------------
-from marketplace.pipeline import router as pipeline_router
-app.include_router(pipeline_router)
-
-
-# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
