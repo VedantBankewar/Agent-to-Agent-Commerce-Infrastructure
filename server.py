@@ -16,6 +16,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {"status": "AgentTrade API is active"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
 class PipelineRequest(BaseModel):
     goal: str
 
