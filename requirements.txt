@@ -8,7 +8,7 @@ langchain-core>=0.3.0
 
 # Blockchain Layer
 algokit>=2.0.0
-pyteal>=4.0.0
+pyteal>=0.26.1
 
 # Web / API Layer
 fastapi>=0.115.0
