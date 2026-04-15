@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 export default function DeployAgent() {
   const [goal, setGoal] = useState("");
   const [logs, setLogs] = useState<string[]>([]);
@@ -48,7 +50,7 @@ export default function DeployAgent() {
     setDealDetails({});
 
     try {
-      const response = await fetch('/api/run_pipeline', {
+      const response = await fetch(`${API_BASE}/api/run_pipeline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ goal })
@@ -132,7 +134,7 @@ export default function DeployAgent() {
     try {
       setIsFinished(false);
       setLogs(prev => [...prev, "\n=> TRIGGERING RELEASE_FUNDS.PY...\n"]);
-      const response = await fetch('/api/release_funds', { method: 'POST' });
+      const response = await fetch(`${API_BASE}/api/release_funds`, { method: 'POST' });
       if (!response.body) return;
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
