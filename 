@@ -1,0 +1,173 @@
+[33mcommit cc98f73f60f8b8e6fec309346c97f1eaba445a2b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mnew-frontend[m[33m, [m[1;31morigin/new-frontend[m[33m)[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 08:36:29 2026 +0530
+
+    Dashboard Update III
+
+[33mcommit 2d8b6518c0b74cefaeed645b59e117a89841a49d[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 08:05:26 2026 +0530
+
+    Dashboard update II
+
+[33mcommit b4d017ec898745a9c270b5c8c774b0575a25e909[m
+Merge: bf574b6 22b2e16
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 07:53:01 2026 +0530
+
+    Dashboard update
+
+[33mcommit bf574b6316ed4519ea42985fa21f5882b2ba64dd[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 06:32:22 2026 +0530
+
+    Updated the UI
+
+[33mcommit 22b2e162cdfeeeaae1a7d6f81c36d9e2428309a0[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Merge: 731c747 f4a19be
+Author: Vedant Bankewar <122672979+VedantBankewar@users.noreply.github.com>
+Date:   Wed Apr 15 05:56:17 2026 +0530
+
+    Merge pull request #3 from VedantBankewar/new-frontend
+    
+    UI completed
+
+[33mcommit f4a19bed8c18d8ae132f2f298e937898de2e0156[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 05:54:53 2026 +0530
+
+    UI completed
+
+[33mcommit 731c747e5824ed497ba92a8848d4a898c712e52d[m
+Merge: f22bf8a bf5f32e
+Author: Vedant Bankewar <122672979+VedantBankewar@users.noreply.github.com>
+Date:   Wed Apr 15 04:47:32 2026 +0530
+
+    Merge pull request #2 from VedantBankewar/frontend
+    
+    Removed old UI
+
+[33mcommit bf5f32e47880c468591fa10a8efe789a9ee105f0[m
+Merge: 33d84cd f22bf8a
+Author: Vedant Bankewar <122672979+VedantBankewar@users.noreply.github.com>
+Date:   Wed Apr 15 04:47:19 2026 +0530
+
+    Merge branch 'main' into frontend
+
+[33mcommit 33d84cda51a841fed43caa03b5d91f253e289bf5[m[33m ([m[1;31morigin/frontend[m[33m, [m[1;32mfrontend[m[33m)[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 04:44:47 2026 +0530
+
+    Removed old UI
+
+[33mcommit f22bf8a27a2e9ee5d30c09a67effed37a2de50b1[m
+Merge: bbff995 f7c7c81
+Author: Vedant Bankewar <122672979+VedantBankewar@users.noreply.github.com>
+Date:   Wed Apr 15 01:38:50 2026 +0530
+
+    Merge pull request #1 from VedantBankewar/contract
+    
+    Implement end-to-end payment release pipeline and stabilize agent transactions
+
+[33mcommit f7c7c81049c287c9a5cd2a94bd4aa6a971c13f79[m[33m ([m[1;31morigin/contract[m[33m, [m[1;32mcontract[m[33m)[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 15 01:33:32 2026 +0530
+
+    Implemented the release funds process
+
+[33mcommit 525d1182ae9bf8ba69cedd3f8ae22b40ba050608[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Tue Apr 14 01:57:21 2026 +0530
+
+    Updated frontend files
+
+[33mcommit 215682fa065acbd8581d4226562ae5461b7af258[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Tue Apr 14 01:56:00 2026 +0530
+
+    Added frontend
+
+[33mcommit bbff99580b1962794ede2ee22473bac86cfbaa1b[m[33m ([m[1;32mmain[m[33m)[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 13 00:44:36 2026 +0530
+
+    Updated README.md
+
+[33mcommit d74c5aea1d228c39094adca2862e90808c5c7694[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Thu Apr 9 18:39:49 2026 +0530
+
+    Tested End-to-End Workflow
+
+[33mcommit 60c1a7357947161051842fce8f1ee5fb3edd23ad[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 8 00:11:09 2026 +0530
+
+    Update gitignore
+
+[33mcommit 8a499865e64dd8f165cb099bf83e04f9f0e0b619[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Wed Apr 8 00:01:47 2026 +0530
+
+    Integerated and Tested Buyer to Escrow Flow
+
+[33mcommit eb3038af859b57092fc19274fd45b5f331c3e2e8[m
+Merge: ca682f5 d304cae
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 6 15:05:11 2026 +0530
+
+    Updated README.md
+
+[33mcommit ca682f56ab62571a17143810efa0f78ecfdc0d03[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 6 15:01:49 2026 +0530
+
+    Prompt & Agent Skeleton added
+
+[33mcommit d304caeccd6a1a75d575cbc09c122ed285a2a7a8[m
+Author: Vedant Bankewar <122672979+VedantBankewar@users.noreply.github.com>
+Date:   Mon Apr 6 13:32:46 2026 +0530
+
+    Fix formatting and improve README content
+
+[33mcommit 52e872c47127849fbaaea02026f28c20eac94b9d[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 6 13:30:09 2026 +0530
+
+    Added Procurement Agent Tool
+
+[33mcommit ceb8c1145260d184c03bd69ac3fa4f59d037dd6d[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 6 01:27:16 2026 +0530
+
+    added tools
+
+[33mcommit 0c83144885f5c086a4c7747975f0ae9dbc1ed19c[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 6 00:57:37 2026 +0530
+
+    Phase 4 completed
+
+[33mcommit 14ee82c58a6bce30607c83f5ddcf51987bf7b8c5[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Mon Apr 6 00:15:40 2026 +0530
+
+    Phase 2 completed
+
+[33mcommit 781310309a9b0ae491671b04642a6d2ac848791f[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Sun Apr 5 12:57:53 2026 +0530
+
+    Phase 1 Completed
+
+[33mcommit faa492a831be257fd1ed9075430d2b9f47a48083[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Sun Apr 5 01:49:59 2026 +0530
+
+    Added .gitignore
+
+[33mcommit 0c91aa1ac29448af96dd6a1cc38b0c5909a62182[m
+Author: VedantBankewar <vedantbankewar2327@gmail.com>
+Date:   Sun Apr 5 01:46:15 2026 +0530
+
+    Initial commit

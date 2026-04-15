@@ -40,7 +40,7 @@ export default function Footer() {
       </div>
       <div className="max-w-7xl mx-auto px-12 py-8 border-t border-[#e5e2e1]/10 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="text-[#c8c8b0]/60">
-          © 2025 AgentTrade. All rights reserved.
+          © 2026 AgentTrade. All rights reserved.
         </div>
       </div>
     </footer>

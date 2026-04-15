@@ -339,7 +339,7 @@ export default function DeployAgent() {
                       key={quote.id} 
                       className={`relative flex flex-col p-5 rounded-2xl border transition-all duration-500 ${
                         quote.isWinner 
-                        ? 'bg-gradient-to-br from-primary/10 to-transparent border-primary/40 shadow-[0_0_20px_rgba(249,171,255,0.1)] scale-105 z-10' 
+                        ? 'bg-gradient-to-br from-primary/10 to-transparent border-primary/40 shadow-[0_0_20px_rgba(249,171,255,0.1)] scale-105 z-10 shimmer-bg' 
                         : 'bg-[#111111] border-white/5 opacity-70 grayscale-[0.3]'
                       }`}
                     >
