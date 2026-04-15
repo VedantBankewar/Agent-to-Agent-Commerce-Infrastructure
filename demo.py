@@ -213,7 +213,7 @@ def ensure_buyer_agent() -> None:
         from utils.wallet import load_wallet, sign_and_send_txn
         deployer = load_wallet("deployer")
         print(f"    Funding buyer {wallet.address[:8]}... from deployer wallet...")
-        sign_and_send_txn(deployer, wallet.address, 50000000, note="Buyer demo funding")
+        sign_and_send_txn(deployer, wallet.address, 25000000, note="Buyer demo funding")
     except Exception as e:
         warn(f"Failed to fund buyer from deployer: {e}")
 
