@@ -213,7 +213,7 @@ def ensure_buyer_agent() -> None:
         from utils.wallet import load_wallet, sign_and_send_txn
         deployer = load_wallet("deployer")
         print(f"    Funding buyer {wallet.address[:8]}... from deployer wallet...")
-        sign_and_send_txn(deployer, wallet.address, 500000, note="Buyer demo funding")
+        sign_and_send_txn(deployer, wallet.address, 5000000, note="Buyer demo funding")
     except Exception as e:
         warn(f"Failed to fund buyer from deployer: {e}")
 
@@ -366,7 +366,7 @@ def generate_supplier_quotes(
         else:
             # Fallback: compute from supplier base_cost even without inventory
             unit_price    = round(
-                supplier["base_cost"] * (1 + supplier["margin_pct"] / 100), 2
+                supplier["base_cost"] * (1 + supplier["margin_pct"] / 100), 4
             )
             total_price   = round(unit_price * quantity, 2)
             delivery_days = supplier["lead_days"]
@@ -573,6 +573,7 @@ def run_procurement_pipeline(goal: str) -> dict[str, Any] | None:
             app_id=escrow_result.app_id,
         )
 
+        from utils.wallet import load_wallet
         buyer_w = load_wallet(BUYER_AGENT_ID)
         supp_w = load_wallet(winner.supplier_id)
 

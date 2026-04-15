@@ -13,7 +13,7 @@ export default function Footer() {
             <h4 className="text-white font-bold uppercase tracking-wider text-xs">Product</h4>
             <ul className="space-y-3">
               <li><a className="text-[#c8c8b0] hover:text-[#f9abff] transition-opacity" href="#features">Features</a></li>
-              <li><a className="text-[#c8c8b0] hover:text-[#f9abff] transition-opacity" href="#">Documentation</a></li>
+              <li><a className="text-[#c8c8b0] hover:text-[#f9abff] transition-opacity" href="https://github.com/VedantBankewar/Agent-to-Agent-Commerce-Infrastructure" target="_blank" rel="noopener noreferrer">Documentation</a></li>
               <li><a className="text-[#c8c8b0] hover:text-[#f9abff] transition-opacity" href="#">Pricing</a></li>
               <li><a className="text-[#c8c8b0] hover:text-[#f9abff] transition-opacity" href="#">API Reference</a></li>
             </ul>
@@ -40,7 +40,7 @@ export default function Footer() {
       </div>
       <div className="max-w-7xl mx-auto px-12 py-8 border-t border-[#e5e2e1]/10 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="text-[#c8c8b0]/60">
-          © 2025 AgentTrade. All rights reserved.
+          © 2026 AgentTrade. All rights reserved.
         </div>
       </div>
     </footer>

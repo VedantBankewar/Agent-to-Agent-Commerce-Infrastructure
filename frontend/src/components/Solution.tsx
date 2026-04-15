@@ -1,6 +1,6 @@
 export default function Solution() {
   return (
-    <section className="min-h-screen flex items-center justify-center px-10 bg-black relative overflow-hidden py-32 pt-40" id="solution">
+    <section className="min-h-screen flex items-center justify-center px-10 relative overflow-hidden py-32 pt-40" id="solution">
       <div className="max-w-screen-2xl w-full flex flex-col md:flex-row items-center gap-20">
         <div className="flex-1 flex justify-center items-center">
           <div className="concentric-rings scale-75 md:scale-100">

@@ -12,7 +12,7 @@ export default {
         "secondary-container": "#feb300",
         "error": "#ffb4ab",
         "surface-container": "#201f1f",
-        "surface-container-highest": "#353534",
+        "surface-container-highest": "#36343b",
         "on-secondary-container": "#6a4800",
         "surface-container-low": "#1c1b1b",
         "secondary-fixed-dim": "#ffba38",
@@ -65,7 +65,11 @@ export default {
       fontFamily: {
         "headline": ["Plus Jakarta Sans", "sans-serif"],
         "body": ["Manrope", "sans-serif"],
-        "label": ["Manrope", "sans-serif"]
+        "label": ["Manrope", "sans-serif"],
+        "mono": ["JetBrains Mono", "monospace"]
+      },
+      backgroundImage: {
+        "pipeline-gradient": "linear-gradient(90deg, #7b008f 0%, #f9abff 50%, #ffd799 100%)",
       }
     }
   },
