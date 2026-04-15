@@ -48,6 +48,20 @@ SUPPLIERS = [
         },
     },
     {
+        "name": "EgoStyle",
+        "category": "furniture",
+        "rating": 4.9,
+        "min_price": 0.030,
+        "base_cost": 0.025,
+        "margin_pct": 22.0,
+        "lead_days": 10,
+        "warranty_yrs": 5.0,
+        "metadata": {
+            "description": "High-end luxury furniture design",
+            "products": ["executive chairs", "bespoke desks", "meeting tables"],
+        },
+    },
+    {
         "name": "OfficePro",
         "category": "office_supplies",
         "rating": 4.5,

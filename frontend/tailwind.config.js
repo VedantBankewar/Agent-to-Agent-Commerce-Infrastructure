@@ -65,7 +65,11 @@ export default {
       fontFamily: {
         "headline": ["Plus Jakarta Sans", "sans-serif"],
         "body": ["Manrope", "sans-serif"],
-        "label": ["Manrope", "sans-serif"]
+        "label": ["Manrope", "sans-serif"],
+        "mono": ["JetBrains Mono", "monospace"]
+      },
+      backgroundImage: {
+        "pipeline-gradient": "linear-gradient(90deg, #7b008f 0%, #f9abff 50%, #ffd799 100%)",
       }
     }
   },

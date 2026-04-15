@@ -15,6 +15,15 @@ export default function DeployAgent() {
     total?: string;
     delivery?: string;
   }>({});
+  const [quotes, setQuotes] = useState<{
+    id: string;
+    supplier: string;
+    score: number;
+    price: string;
+    delivery: string;
+    warranty: string;
+    isWinner: boolean;
+  }[]>([]);
 
   const presetGoals = [
     "Buy 50 ergonomic chairs, budget 300000, by June 15",
@@ -34,6 +43,7 @@ export default function DeployAgent() {
     if (!goal || isRunning) return;
     setIsRunning(true);
     setLogs([]);
+    setQuotes([]);
     setIsFinished(false);
     setDealDetails({});
 
@@ -89,6 +99,24 @@ export default function DeployAgent() {
                 const total = parts[0];
                 const delivery = parts.find(p => p.includes('delivery='))?.split('=')[1] || '';
                 setDealDetails(prev => ({ ...prev, total, delivery }));
+              }
+
+              // Quote Parsing: Pattern for "👑 ChairHub: score=94.5 | $92.00/unit | 5d | 2.0yr"
+              const quoteMatch = cleanData.match(/^\s*(👑)?\s*([^:]+):\s*score=([\d.]+)\s*\|\s*\$([\d.]+)\/unit\s*\|\s*(\d+)d\s*\|\s*([\d.]+)yr/);
+              if (quoteMatch) {
+                const [, isWinner, supplier, score, price, delivery, warranty] = quoteMatch;
+                setQuotes(prev => {
+                  if (prev.some(q => q.supplier === supplier.trim())) return prev;
+                  return [...prev, {
+                    id: Math.random().toString(36).substr(2, 9),
+                    supplier: supplier.trim(),
+                    score: parseFloat(score),
+                    price: `$${price}`,
+                    delivery: `${delivery}d`,
+                    warranty: `${warranty}yr`,
+                    isWinner: !!isWinner
+                  }];
+                });
               }
             }
           }
@@ -181,30 +209,31 @@ export default function DeployAgent() {
   };
 
   return (
-    <div className="bg-[#1a171d] min-h-screen text-on-surface font-body overflow-x-hidden selection:bg-primary-container selection:text-primary flex flex-col">
-      {/* Header */}
-      <header className="border-b border-white/5 py-4 px-10 flex justify-between items-center w-full z-50 bg-[#141217]">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-primary-container flex items-center justify-center shadow-[0_0_15px_rgba(249,171,255,0.4)]">
-            <span className="material-symbols-outlined text-white text-sm">bolt</span>
-          </div>
-          <Link className="text-xl font-bold tracking-tight text-white flex items-center gap-2" to="/">
-            AgentTrade <span className="text-[10px] font-bold text-primary tracking-[0.2em] uppercase mt-1">DASHBOARD</span>
-          </Link>
-        </div>
-        <Link className="text-sm font-medium text-on-surface-variant hover:text-white transition-colors" to="/">Home</Link>
-      </header>
+    <div className="bg-background min-h-screen text-on-surface font-body overflow-x-hidden selection:bg-primary-container selection:text-primary flex flex-col relative">
+      {/* Floating Brand Logo */}
+      <Link className="absolute top-8 left-10 z-[100] text-2xl font-bold text-primary font-headline tracking-tight hover:opacity-80 transition-opacity" to="/">
+        AgentTrade
+      </Link>
 
-      {/* Main Content */}
-      <main className="flex-1 w-full max-w-screen-2xl mx-auto px-10 py-12 flex flex-col gap-8">
+      {/* Main Content Canvas */}
+      <main className="w-full flex-1 flex flex-col px-6 relative py-20 items-center">
         
-        {/* Title Section */}
-        <div className="space-y-4 max-w-2xl">
-          <h1 className="text-4xl md:text-5xl font-headline font-bold text-white tracking-tight">Procurement Dashboard</h1>
-          <p className="text-on-surface-variant text-lg leading-relaxed">
-            Watch AI agents negotiate, score suppliers, and lock escrow on Algorand — all from one interface.
-          </p>
-        </div>
+        {/* Ambient Background Glow */}
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
+        <div className="fixed top-1/3 left-1/4 w-[300px] h-[300px] bg-secondary/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
+
+        <section className="w-full max-w-screen-2xl z-10 flex flex-col gap-8">
+          
+          {/* Header Group */}
+          <div className="mb-12 text-center mt-8">
+            <span className="text-[10px] font-bold tracking-[0.2em] text-secondary uppercase mb-3 block">New Deployment</span>
+            <h1 className="text-4xl md:text-6xl font-headline font-extrabold text-on-surface tracking-tight leading-none mb-4">
+              Procurement <span className="text-primary italic">Agent</span>
+            </h1>
+            <p className="text-on-surface-variant/70 text-lg max-w-xl mx-auto font-body">
+              Define the objective, set the parameters, and let the Oracle execute across the multi-chain ecosystem.
+            </p>
+          </div>
 
         {/* Dashboard Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6">
@@ -213,10 +242,10 @@ export default function DeployAgent() {
           <div className="flex flex-col gap-6">
             
             {/* Goal Card */}
-            <div className="bg-surface-container-low border border-white/5 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="material-symbols-outlined text-primary text-lg">rocket_launch</span>
-                <h2 className="font-headline font-bold text-white tracking-wide">Procurement Goal</h2>
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-xl p-8 transition-all duration-500 shadow-xl">
+              <div className="flex items-center gap-3 mb-8">
+                <span className="material-symbols-outlined text-primary text-2xl">rocket_launch</span>
+                <h2 className="text-xl font-bold text-on-surface font-headline tracking-wide">Procurement Goal</h2>
               </div>
               
               <div className="flex flex-col md:flex-row gap-4 mb-4">
@@ -249,7 +278,7 @@ export default function DeployAgent() {
                   <button 
                     key={idx}
                     onClick={() => setGoal(preset)}
-                    className="text-[10px] md:text-xs border border-white/10 text-on-surface-variant px-3 py-1.5 rounded-full hover:bg-white/5 hover:text-white transition-colors text-left"
+                    className="bg-surface-container-highest/20 border border-outline-variant/10 px-4 py-2 rounded-full text-xs text-on-surface-variant/80 hover:bg-surface-container-highest/40 transition-colors text-left"
                     disabled={isRunning}
                   >
                     {preset}
@@ -259,45 +288,101 @@ export default function DeployAgent() {
             </div>
 
             {/* Readiness Pipeline Card */}
-            <div className="bg-surface-container-low border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center">
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center">
               <div className="w-full flex justify-between items-center mb-6">
-                <h2 className="text-on-surface-variant text-[10px] tracking-widest font-bold uppercase">Readiness Pipeline</h2>
-                <div className={`px-4 py-1.5 rounded-full border text-[11px] font-mono transition-colors ${
-                  isRunning ? 'border-secondary/30 text-secondary bg-secondary/10' :
-                  isFinished ? 'border-primary/30 text-primary bg-primary/10' :
-                  'border-white/10 text-white/40'
-                }`}>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">Readiness Pipeline</h3>
+                <span className="text-[10px] font-label text-secondary px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                   {isRunning ? 'Optimizing...' : isFinished ? 'Completed' : 'Idle'}
-                </div>
+                </span>
               </div>
 
               {/* Graphical Bar */}
-              <div className="w-full h-[3px] bg-white/5 relative mt-4 mb-8">
+              <div className="w-full h-[2px] bg-surface-container-highest relative mt-4 mb-8 overflow-hidden">
                 <div 
-                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary to-secondary transition-all duration-1000 ease-out"
+                  className="absolute top-0 left-0 h-full bg-pipeline-gradient transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(249,171,255,0.4)]"
                   style={{ width: `${pipelineStage === 0 ? 0 : (pipelineStage / 4) * 100}%` }}
                 >
-                  {/* Glowing tip */}
-                  {isRunning && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-secondary rounded-full blur-[4px] opacity-70"></div>
-                  )}
                 </div>
               </div>
 
               {/* Labels */}
               <div className="w-full grid grid-cols-4 gap-4">
                 {pipelineSteps.map((step, idx) => (
-                  <div key={idx} className={`flex flex-col ${step.active ? 'opacity-100' : 'opacity-40'}`}>
-                    <span className={`text-[10px] font-bold tracking-widest ${
+                  <div key={idx} className={`flex flex-col gap-1 ${step.active ? 'opacity-100' : 'opacity-30'}`}>
+                    <span className={`text-[10px] font-bold uppercase ${
                       step.active && step.sub !== 'Queued' ? 'text-primary' : 'text-on-surface-variant'
                     }`}>
                       {step.label}
                     </span>
-                    <span className="text-xs md:text-sm text-on-surface-variant mt-1">{step.sub}</span>
+                    <span className="text-xs text-on-surface-variant/80">{step.sub}</span>
                   </div>
                 ))}
               </div>
             </div>
+
+            {/* Comparison Grid (Logic Phase) */}
+            {(quotes.length > 0) && (
+              <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col transition-all animate-in fade-in zoom-in duration-700">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-secondary tracking-widest mb-1">Comparative Analysis</span>
+                    <h2 className="font-headline font-bold text-white tracking-wide">Multi-Agent Bidding</h2>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+                    <span className="text-[10px] font-bold text-on-surface-variant uppercase">{quotes.length} {quotes.length === 1 ? 'Quote' : 'Quotes'} Received</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {quotes.sort((a,b) => b.score - a.score).map((quote) => (
+                    <div 
+                      key={quote.id} 
+                      className={`relative flex flex-col p-5 rounded-2xl border transition-all duration-500 ${
+                        quote.isWinner 
+                        ? 'bg-gradient-to-br from-primary/10 to-transparent border-primary/40 shadow-[0_0_20px_rgba(249,171,255,0.1)] scale-105 z-10' 
+                        : 'bg-[#111111] border-white/5 opacity-70 grayscale-[0.3]'
+                      }`}
+                    >
+                      {quote.isWinner && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-on-primary text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1 uppercase tracking-tight">
+                          <span className="material-symbols-outlined text-[12px]">award</span>
+                          Winner Selected
+                        </div>
+                      )}
+                      
+                      <div className="flex flex-col mb-4">
+                        <span className={`text-xs font-bold uppercase tracking-widest mb-1 ${quote.isWinner ? 'text-primary' : 'text-on-surface-variant'}`}>{quote.supplier}</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-bold font-headline text-white">{quote.score}</span>
+                          <span className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">/100</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 pt-4 border-t border-white/5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-on-surface-variant">Price</span>
+                          <span className="text-white font-mono font-bold">{quote.price}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-on-surface-variant">Speed</span>
+                          <span className="text-white font-bold">{quote.delivery}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-on-surface-variant">Warranty</span>
+                          <span className="text-white font-bold">{quote.warranty}</span>
+                        </div>
+                      </div>
+
+                      {quote.isWinner && (
+                        <div className="mt-4 pt-3 flex justify-center">
+                           <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* System Feed (Collapsible) */}
             <div className={`bg-surface-container-low border border-white/5 rounded-2xl flex flex-col shadow-xl overflow-hidden transition-all duration-300 ${logsHeight === 'expanded' ? 'h-[300px]' : 'h-[60px]'}`}>
@@ -450,6 +535,20 @@ export default function DeployAgent() {
             </div>
           </div>
 
+        </div>
+        </section>
+
+        {/* Contextual "Agent Pulse" Decorative Element */}
+        <div className="fixed bottom-12 right-12 hidden lg:flex items-center justify-center bg-surface-container-low/40 backdrop-blur-md p-4 rounded-xl border border-outline-variant/10 z-50">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-secondary w-2 h-2 m-auto"></div>
+            <div className="w-10 h-10 rounded-full border border-primary/20 animate-pulse opacity-30"></div>
+            <div className="absolute inset-[-8px] rounded-full border border-primary/10 animate-pulse opacity-10"></div>
+          </div>
+          <div className="ml-4">
+            <div className="text-[10px] font-bold text-on-surface tracking-widest uppercase">Oracle Pulse</div>
+            <div className="text-[10px] text-on-surface-variant/50">Steady • {isRunning ? '12ms' : '24ms'} Latency</div>
+          </div>
         </div>
       </main>
     </div>
