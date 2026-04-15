@@ -140,6 +140,33 @@ export default function DeployAgent() {
     }
   };
 
+  const [logsHeight, setLogsHeight] = useState<'collapsed' | 'expanded'>('collapsed');
+
+  const getPipelineStage = () => {
+    if (!isRunning && !isFinished) return 0;
+    const recent = logs.join(" ");
+    
+    // Stage 4: Execution / On-chain
+    if (isFinished || recent.includes("Locking escrow") || recent.includes("TRIGGERING RELEASE")) return 4;
+    // Stage 3: Logic / Algorithmic Selection
+    if (recent.includes("Quotes scored") || recent.includes("Winner:")) return 3;
+    // Stage 2: Nodes / Agent Negotiation
+    if (recent.includes("RFQ broadcast") || recent.includes("generate_supplier_quotes")) return 2;
+    // Stage 1: Identity / Market Discovery
+    if (recent.includes("search") || recent.includes("Deploying")) return 1;
+    
+    return 1;
+  };
+
+  const pipelineStage = getPipelineStage();
+
+  const pipelineSteps = [
+    { label: "IDENTITY", sub: pipelineStage > 1 ? "Verified" : pipelineStage === 1 ? "Discovering" : "Waiting", active: pipelineStage >= 1 },
+    { label: "NODES", sub: pipelineStage > 2 ? "Allocated" : pipelineStage === 2 ? "Negotiating" : "Queued", active: pipelineStage >= 2 },
+    { label: "LOGIC", sub: pipelineStage > 3 ? "Computed" : pipelineStage === 3 ? "Scoring" : "Queued", active: pipelineStage >= 3 },
+    { label: "EXECUTION", sub: isFinished ? "Settled" : pipelineStage === 4 ? "Compiling" : "Queued", active: pipelineStage >= 4 },
+  ];
+
   const currentStep = () => {
     if (!isRunning && !isFinished) return "Waiting to start...";
     const recent = logs.slice(-10).join(" ");
@@ -231,25 +258,66 @@ export default function DeployAgent() {
               </div>
             </div>
 
-            {/* Pipeline Steps Card */}
-            <div className="bg-surface-container-low border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col flex-1 min-h-[300px] h-[400px]">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-headline font-bold text-white tracking-wide">Live Pipeline Logs</h2>
-                {isRunning && (
-                  <div className="flex items-center gap-2 text-primary">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-                    </span>
-                    <span className="text-xs uppercase tracking-widest font-bold">Executing</span>
-                  </div>
-                )}
+            {/* Readiness Pipeline Card */}
+            <div className="bg-surface-container-low border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center">
+              <div className="w-full flex justify-between items-center mb-6">
+                <h2 className="text-on-surface-variant text-[10px] tracking-widest font-bold uppercase">Readiness Pipeline</h2>
+                <div className={`px-4 py-1.5 rounded-full border text-[11px] font-mono transition-colors ${
+                  isRunning ? 'border-secondary/30 text-secondary bg-secondary/10' :
+                  isFinished ? 'border-primary/30 text-primary bg-primary/10' :
+                  'border-white/10 text-white/40'
+                }`}>
+                  {isRunning ? 'Optimizing...' : isFinished ? 'Completed' : 'Idle'}
+                </div>
               </div>
+
+              {/* Graphical Bar */}
+              <div className="w-full h-[3px] bg-white/5 relative mt-4 mb-8">
+                <div 
+                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary to-secondary transition-all duration-1000 ease-out"
+                  style={{ width: `${pipelineStage === 0 ? 0 : (pipelineStage / 4) * 100}%` }}
+                >
+                  {/* Glowing tip */}
+                  {isRunning && (
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-secondary rounded-full blur-[4px] opacity-70"></div>
+                  )}
+                </div>
+              </div>
+
+              {/* Labels */}
+              <div className="w-full grid grid-cols-4 gap-4">
+                {pipelineSteps.map((step, idx) => (
+                  <div key={idx} className={`flex flex-col ${step.active ? 'opacity-100' : 'opacity-40'}`}>
+                    <span className={`text-[10px] font-bold tracking-widest ${
+                      step.active && step.sub !== 'Queued' ? 'text-primary' : 'text-on-surface-variant'
+                    }`}>
+                      {step.label}
+                    </span>
+                    <span className="text-xs md:text-sm text-on-surface-variant mt-1">{step.sub}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* System Feed (Collapsible) */}
+            <div className={`bg-surface-container-low border border-white/5 rounded-2xl flex flex-col shadow-xl overflow-hidden transition-all duration-300 ${logsHeight === 'expanded' ? 'h-[300px]' : 'h-[60px]'}`}>
+              <button 
+                onClick={() => setLogsHeight(prev => prev === 'expanded' ? 'collapsed' : 'expanded')}
+                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-white/50">terminal</span>
+                  <span className="text-xs font-bold text-white tracking-widest uppercase">System Feed</span>
+                </div>
+                <span className="material-symbols-outlined text-white/50 text-[18px]">
+                  {logsHeight === 'expanded' ? 'expand_less' : 'expand_more'}
+                </span>
+              </button>
               
-              <div className="flex-1 bg-[#0a080c] border border-white/5 rounded-xl p-4 overflow-y-auto font-mono text-[11px] md:text-sm text-on-surface-variant whitespace-pre-wrap leading-relaxed shadow-inner scrollbar-hide">
+              <div className="flex-1 bg-[#0a080c] p-4 overflow-y-auto font-mono text-[11px] md:text-xs text-on-surface-variant whitespace-pre-wrap leading-relaxed scrollbar-hide border-t border-white/5">
                 {logs.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-on-surface-variant/40 text-center px-4">
-                    Enter a goal and click Run Pipeline to begin
+                  <div className="h-full flex items-center justify-center text-on-surface-variant/40">
+                    Awaiting initialization...
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1">

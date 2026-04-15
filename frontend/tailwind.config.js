@@ -12,7 +12,7 @@ export default {
         "secondary-container": "#feb300",
         "error": "#ffb4ab",
         "surface-container": "#201f1f",
-        "surface-container-highest": "#353534",
+        "surface-container-highest": "#36343b",
         "on-secondary-container": "#6a4800",
         "surface-container-low": "#1c1b1b",
         "secondary-fixed-dim": "#ffba38",
