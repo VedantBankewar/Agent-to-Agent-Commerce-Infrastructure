@@ -394,9 +394,17 @@ def verify_agreement(agreement: dict, on_chain_hash: str) -> bool:
     # False → someone modified the agreement ✗
 ```
 
----
+### Technical Note: Minimum Balance Requirement (MBR)
 
-## Transaction Lifecycle
+In the Algorand blockchain, every piece of data stored "on-chain" requires a **Minimum Balance Requirement (MBR)** to prevent network bloat and spam. This is why you may notice the "Required Balance" of the escrow app increasing over time:
+
+- **New Deals**: Every time you lock a new escrow deal, the smart contract creates a "Box" (an on-chain storage entry) to keep track of the deal details. Each box adds a small cost (base ~0.0025 ALGO + 0.0004 ALGO per byte) to the contract's required balance.
+- **Opt-ins**: If new accounts (buyer/supplier) are used for each run and they interact with the contract, their opt-in also contributes to the on-chain footprint.
+- **Redeployments**: Creating a brand new application starts with its own base MBR (0.1 ALGO).
+
+Essentially, as your "Database" (the smart contract state) grows with more history, the network requires the contract account to hold a slightly higher balance to "pay" for that storage occupancy.
+
+---
 
 ```
 ① Agent Registration
