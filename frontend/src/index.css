@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+}
+body {
+    background-color: #131313;
+    color: #e5e2e1;
+    font-family: 'Manrope', sans-serif;
+}
+.ethereal-glow {
+    background: radial-gradient(circle at center, rgba(123, 0, 143, 0.15) 0%, rgba(19, 19, 19, 0) 70%);
+}
+.glass-panel {
+    background: rgba(28, 27, 27, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(249, 171, 255, 0.1);
+}
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.hero-text-shadow {
+    text-shadow: 0 0 40px rgba(249, 171, 255, 0.3);
+}
+.concentric-glow-1 {
+    background: radial-gradient(circle, rgba(123, 0, 143, 0.25) 0%, transparent 60%);
+    width: 800px;
+    height: 800px;
+}
+.concentric-glow-2 {
+    background: radial-gradient(circle, rgba(255, 215, 153, 0.1) 0%, transparent 70%);
+    width: 1000px;
+    height: 1000px;
+}
+.top-light-beam {
+    background: linear-gradient(180deg, rgba(249, 171, 255, 0.2) 0%, rgba(255, 215, 153, 0.1) 40%, transparent 100%);
+    mask-image: radial-gradient(circle at 50% 0%, black 20%, transparent 70%);
+}
+.concentric-rings {
+    position: relative;
+    width: 500px;
+    height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(249, 171, 255, 0.1);
+    background: radial-gradient(circle, rgba(123, 0, 143, 0.05) 0%, transparent 100%);
+}
+.ring-1 { width: 100%; height: 100%; }
+.ring-2 { width: 75%; height: 75%; }
+.ring-3 { width: 50%; height: 50%; border: 1.5px solid rgba(249, 171, 255, 0.2); }
+.ring-inner { width: 25%; height: 25%; background: rgba(123, 0, 143, 0.2); filter: blur(40px); }
+.glow-soft {
+    box-shadow: 0 0 40px -10px rgba(123, 0, 143, 0.3);
+}
+.agent-mandate-focus:focus-within {
+    box-shadow: 0 0 60px -15px rgba(249, 171, 255, 0.15);
+}
+.pipeline-gradient {
+    background: linear-gradient(90deg, #7b008f 0%, #f9abff 50%, #ffd799 100%);
+}
