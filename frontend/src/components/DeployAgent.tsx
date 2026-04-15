@@ -26,9 +26,9 @@ export default function DeployAgent() {
   }[]>([]);
 
   const presetGoals = [
-    "Buy 50 ergonomic chairs, budget 300000, by June 15",
-    "Buy 100 pens, budget 5000, by May 1",
-    "Buy 10 desks, budget 50000, by August 2026"
+    "Buy 50 ergonomic chairs, budget 10, by June 15",
+    "Buy 100 pens, budget 5, by May 1",
+    "Buy 10 desks, budget 20, by August 2026"
   ];
 
   const scrollToBottom = () => {
