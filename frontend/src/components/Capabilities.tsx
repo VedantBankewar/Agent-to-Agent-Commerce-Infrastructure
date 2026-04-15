@@ -1,6 +1,6 @@
 export default function Capabilities() {
   return (
-    <section className="min-h-screen flex items-center justify-center px-10 bg-[#0e0e0e] relative overflow-hidden py-32 pt-40" id="features">
+    <section className="min-h-screen flex items-center justify-center px-10 relative overflow-hidden py-32 pt-40" id="features">
       <div className="max-w-screen-2xl w-full relative z-10">
         <div className="text-center mb-20 space-y-4">
           <span className="text-primary font-label text-xs font-bold uppercase tracking-[0.3em] block">CAPABILITIES</span>
