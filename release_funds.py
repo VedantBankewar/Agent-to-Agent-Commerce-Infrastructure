@@ -10,7 +10,14 @@ from contracts.interact import release_payment, load_config
 from utils.wallet import get_algo_client, load_wallet
 from utils.logger import get_logger, log_txn
 
-DATABASE_PATH = "db/hackathon.db"
+# Load .env if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
+DATABASE_PATH = os.getenv("DATABASE_PATH", "db/hackathon.db")
 DELIVERY_DIR = "delivery"
 
 def log_color(msg):
@@ -22,9 +29,25 @@ def release_funds():
     
     # 1. Locate Locked Deal
     print("\n[1] Finding locked deal...")
-    conn = sqlite3.connect(db_path)
+    # Use absolute path to ensure we find the right file
+    abs_db_path = Path(__file__).parent / DATABASE_PATH
+    print(f"    Checking database at: {abs_db_path}")
+    
+    if not abs_db_path.exists():
+        print(f"Error: Database file not found at {abs_db_path}")
+        return
+
+    conn = sqlite3.connect(abs_db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+    
+    # Verify table exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='deals'")
+    if not cursor.fetchone():
+        print("Error: Table 'deals' does not exist in the database. Has the DB been initialized?")
+        conn.close()
+        return
+
     cursor.execute("SELECT deal_id, supplier_id, buyer_id FROM deals WHERE status = 'locked' AND supplier_id NOT LIKE 'dryrun%' ORDER BY locked_at DESC LIMIT 1")
     deal = cursor.fetchone()
     
