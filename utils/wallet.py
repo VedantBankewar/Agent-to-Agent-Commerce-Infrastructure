@@ -81,8 +81,22 @@ def save_wallet(agent_id: str, wallet: Wallet) -> Path:
 
 
 def load_wallet(agent_id: str) -> Wallet:
-    """Load a previously saved wallet."""
+    """
+    Load a wallet. For 'deployer', checks environment variable ALGORAND_CREATOR_MNEMONIC 
+    first before falling back to the filesystem.
+    """
     import json
+
+    # Special case: deployer from environment (for cloud/Railway)
+    if agent_id == "deployer":
+        mn = os.getenv("ALGORAND_CREATOR_MNEMONIC")
+        if mn:
+            try:
+                pk = mnemonic.to_private_key(mn)
+                addr = account.address_from_private_key(pk)
+                return Wallet(address=addr, private_key=pk, mnemonic=mn)
+            except Exception:
+                pass  # Fall back to file if mnemonic is invalid
 
     path = WALLET_DIR / f"{agent_id}.json"
     with open(path) as f:
