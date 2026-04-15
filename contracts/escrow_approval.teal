@@ -30,6 +30,11 @@ int 0
 ==
 byte "s"
 app_global_get
+int 3
+==
+||
+byte "s"
+app_global_get
 int 4
 ==
 ||
