@@ -7,8 +7,8 @@ function NavLink({ to, children, className }: { to: string; children: React.Reac
 
   if (isHome && hash) {
     return (
-      <a 
-        href={`#${hash}`} 
+      <a
+        href={`#${hash}`}
         className={className}
         onClick={(e) => {
           e.preventDefault();
@@ -28,8 +28,8 @@ export default function Header() {
   return (
     <header className="fixed top-0 w-full z-50 bg-black/40 backdrop-blur-2xl border-b border-white/5">
       <div className="flex justify-between items-center px-10 py-4 max-w-screen-2xl mx-auto font-headline font-medium tracking-tight">
-        <NavLink 
-          className="text-2xl font-bold text-on-surface tracking-tight hover:text-primary transition-colors duration-300" 
+        <NavLink
+          className="text-2xl font-bold text-on-surface tracking-tight hover:text-primary transition-colors duration-300"
           to="/#hero"
         >
           AgentTrade
@@ -46,4 +46,4 @@ export default function Header() {
       </div>
     </header>
   );
-}
+} 
