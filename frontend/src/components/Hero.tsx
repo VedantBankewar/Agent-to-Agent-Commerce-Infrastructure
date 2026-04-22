@@ -21,7 +21,7 @@ export default function Hero() {
             <span className="material-symbols-outlined ml-2 text-sm">arrow_forward</span>
           </Link>
           <a
-            href="https://github.com/VedantBankewar/Agent-to-Agent-Commerce-Infrastructure"
+            href="https://github.com/VedantBankewar/Agent-to-Agent-Commerce-Infrastructure#readme"
             target="_blank"
             rel="noopener noreferrer"
             className="bg-white/5 border border-white/10 text-on-surface px-12 py-4 rounded-lg text-lg font-bold backdrop-blur-md hover:bg-white/10 transition-all flex items-center justify-center"
