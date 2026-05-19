@@ -20,7 +20,7 @@ Follow this exact sequence. Each phase must be complete before the next begins.
 - Store: buyer address, supplier address, amount, deal_hash, delivery_deadline, state
 - State stored as a global UInt (0=IDLE, 1=LOCKED, 2=DELIVERED, 3=COMPLETED, 4=REFUNDED)
 - Never store large data on-chain — only hashes
-- Contract operates in microALGO; USD → ALGO conversion happens in `lock_escrow` tool
+- Contract operates in micro-USDC (6 decimals); USD = USDC 1:1, no conversion needed
 
 ## Database Rules
 
@@ -29,7 +29,7 @@ Follow this exact sequence. Each phase must be complete before the next begins.
 - Timestamps in UTC always
 - No hardcoded IDs — use UUIDs or generated keys
 - Negotiation rounds table stores every message exchanged (full audit trail)
-- Store USD amounts in negotiation_rounds; ALGO amounts only in deals table after escrow lock
+- Store USD amounts in negotiation_rounds; USDC amounts (1:1 with USD) in deals table after escrow lock
 
 ## LangChain/LangGraph Agent Rules
 

@@ -34,12 +34,12 @@ Buyer (Structured Form — USD)
 │  │ (determinist)│ │ (Claude/GPT) │ │ (API/Redis)  │ │
 │  └──────────────┘ └──────────────┘ └──────────────┘ │
 └──────────────────────────┬───────────────────────────┘
-                           │  Deal agreed — lock payment (USD → ALGO conversion)
+                           │  Deal agreed — lock USDC payment (1:1 with USD)
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        Algorand Blockchain                                   │
 │   ┌──────────────────────────────┐                                          │
-│   │   Escrow Smart Contract      │  ← ALGO locked (converted from USD)      │
+│   │   Escrow Smart Contract      │  ← USDC locked (ASA, 1:1 with USD)       │
 │   │   PyTeal state machine       │  ← Deal hash anchored on-chain           │
 │   │   Auto-releases on proof     │  ← Delivery proof triggers release       │
 │   │   Refunds on timeout         │  ← Buyer protected if delivery fails     │
@@ -65,7 +65,7 @@ Buyer (Structured Form — USD)
 | `send_counter_offer` | Multi-variable counter to one supplier |
 | `accept_offer` | Accept supplier's terms |
 | `reject_supplier` | Walk away from negotiation |
-| `lock_escrow` | Convert USD → ALGO, lock on Algorand |
+| `lock_escrow` | Lock USDC in Algorand escrow (1:1 with USD) |
 | `get_negotiation_status` | View all active negotiations |
 
 ### Supplier Types
@@ -81,7 +81,7 @@ Buyer (Structured Form — USD)
 **On-chain (Algorand) — permanent, public, tamper-proof:**
 - Agent wallet addresses
 - Deal terms hash SHA-256 (note field on escrow lock)
-- ALGO payment amount (converted from USD at lock time)
+- USDC payment amount (ASA, 1:1 with USD)
 - Delivery proof hash (note field on delivery)
 - Escrow contract state transitions
 - Payment release and refund transactions
@@ -115,21 +115,21 @@ IDLE → LOCKED → DELIVERED → COMPLETED
 
 | Function | Caller | Effect |
 |---|---|---|
-| `lock_escrow(buyer, supplier, amount, deal_hash, deadline)` | Buyer agent | Locks ALGO (converted from USD), records deal hash |
+| `lock_escrow(buyer, supplier, amount, deal_hash, deadline)` | Buyer agent | Locks USDC (1:1 with USD), records deal hash |
 | `submit_delivery_proof(rfq_id, delivery_hash)` | Supplier | Records proof, transitions to DELIVERED |
-| `release_payment()` | Anyone (permissionless) | Transfers ALGO to supplier, marks COMPLETED |
-| `claim_refund()` | Buyer agent (after deadline) | Returns ALGO to buyer, marks REFUNDED |
+| `release_payment()` | Anyone (permissionless) | Transfers USDC to supplier, marks COMPLETED |
+| `claim_refund()` | Buyer agent (after deadline) | Returns USDC to buyer, marks REFUNDED |
 
 ---
 
-## USD-First Pricing
+## USD/USDC Settlement
 
 - **All UI, agent communication, database values, and negotiation in USD**
 - Buyer sets budget in USD, sees prices in USD, negotiation happens in USD
-- **Conversion to ALGO only at escrow lock time** via configurable rate
-- The escrow contract operates in microALGO internally
-- Store `usd_to_algo_rate` in the deal record for auditability
-- Buyer never sees ALGO unless they click the Algorand explorer link
+- **Settlement in USDC (Algorand Standard Asset) — 1:1 with USD, no conversion needed**
+- The escrow contract operates in micro-USDC (6 decimals) internally
+- A mock USDC ASA is created during deployment for testnet/demo
+- ALGO is still needed for transaction fees on Algorand
 
 ---
 
@@ -348,15 +348,15 @@ AgentTrade/
    reject_supplier() → losing suppliers notified
 
 ⑧ Escrow Lock  [ON-CHAIN]
-   lock_escrow() → USD → ALGO conversion → ALGO locked in contract
-   deal_hash anchored on-chain, usd_to_algo_rate recorded
+   lock_escrow() → USDC locked in contract (1:1 with USD)
+   deal_hash anchored on-chain
 
 ⑨ Delivery Proof  [ON-CHAIN]
    submit_proof() → delivery_hash anchored on-chain
    Contract state: DELIVERED
 
 ⑩ Payment Release  [ON-CHAIN]
-   release_payment() → ALGO transferred to supplier
+   release_payment() → USDC transferred to supplier
    Contract state: COMPLETED
 
 ⑪ Audit Trail
@@ -393,7 +393,7 @@ Event types: `agent_started`, `suppliers_discovered`, `quote_received`, `counter
 | HumanSupplier | API/Redis adapter for human-in-the-loop |
 | Deep Negotiation | Up to 7 rounds, multi-variable, concurrent |
 | Priority-Based Strategy | Cost/Speed/Quality affects scoring weights and agent behavior |
-| USD → ALGO Conversion | All USD in UI, conversion at escrow lock time |
+| USDC Settlement | All USD in UI, USDC on-chain (1:1 with USD, no conversion) |
 | Negotiation Persistence | negotiation_sessions + negotiation_rounds in SQLite |
 | EventBus Decoupling | Agent works CLI-only; frontend subscribes to events |
 | React Dashboard | Structured form, bidding grid, negotiation timeline, escrow details |
@@ -405,7 +405,6 @@ Event types: `agent_started`, `suppliers_discovered`, `quote_received`, `counter
 - IPFS / Arweave document storage
 - Real IoT delivery triggers / logistics oracles
 - On-chain reputation system
-- Stablecoin (USDC ASA) payments
 - Multi-sig procurement committees
 - Milestone / split-funding escrow models
 - Production PostgreSQL

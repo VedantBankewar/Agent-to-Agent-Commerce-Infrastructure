@@ -2,7 +2,7 @@
 
 ## Overview
 
-AgentTrade is a **Python-first** autonomous agent-to-agent commerce infrastructure. An LLM-powered buyer agent autonomously discovers suppliers, negotiates deeply (5-7 rounds, multi-variable), and settles payments via Algorand escrow. All business logic uses USD; ALGO conversion happens only at escrow lock time.
+AgentTrade is a **Python-first** autonomous agent-to-agent commerce infrastructure. An LLM-powered buyer agent autonomously discovers suppliers, negotiates deeply (5-7 rounds, multi-variable), and settles payments via Algorand escrow using USDC (ASA). All business logic uses USD; settlement is in USDC (1:1 with USD).
 
 ## Stack Commitments (Do Not Change)
 
@@ -47,21 +47,21 @@ When in doubt, follow CLAUDE.md for this project.
 
 **Key principle**: The buyer agent communicates through `SupplierInterface` ABC. It never knows if the other side is a bot, an LLM, or a human.
 
-## USD-First Pricing
+## USD/USDC Settlement
 
 - All UI, agent communication, and database values in **USD**
 - Buyer sets budget in USD, sees prices in USD, negotiation happens in USD
-- Conversion to ALGO **only at escrow lock time** via `lock_escrow` tool
-- The escrow contract still operates in microALGO internally
-- Store `usd_to_algo_rate` in the deal record for auditability
-- Buyer never sees ALGO unless they click the Algorand explorer link
+- **Settlement in USDC** (Algorand Standard Asset) — 1:1 with USD, no conversion needed
+- The escrow contract operates in micro-USDC (6 decimals) internally
+- A mock USDC ASA is created during deployment for testnet/demo
+- ALGO is still needed for transaction fees on Algorand
 
 ## On-chain / Off-chain Split
 
 **On-chain (Algorand) — permanent, public, tamper-proof only:**
 - Agent wallet address (note field on registration)
 - Deal terms hash SHA-256 (note field on escrow lock)
-- ALGO payment amount (payment transaction)
+- USDC payment amount (ASA transfer)
 - Delivery proof hash (note field on delivery)
 - Escrow contract global state transitions
 - Payment release and refund transactions
@@ -242,9 +242,9 @@ The `parse_procurement_goal()` regex parser from v1 is eliminated entirely.
 4. Quote Evaluation → `evaluate_quotes()` → priority-weighted scorer
 5. Deep Negotiation → `send_counter_offer()` × N rounds × M suppliers (concurrent)
 6. Offer Acceptance → `accept_offer(supplier_id)` → best scoring offer within budget
-7. Escrow Lock → `lock_escrow(supplier_id)` → USD → ALGO conversion, ALGO locked, deal_hash in note field
+7. Escrow Lock → `lock_escrow(supplier_id)` → USDC locked (1:1 with USD), deal_hash in note field
 8. Delivery Submission → supplier submits proof → delivery_hash in note field
-9. Payment Release → `release_payment()` → ALGO to supplier
+9. Payment Release → `release_payment()` → USDC to supplier
 10. Audit Trail → all on-chain txns verifiable on Algorand Testnet Explorer
 
 ## v2 Scope — What to Build vs Skip
@@ -254,7 +254,7 @@ The `parse_procurement_goal()` regex parser from v1 is eliminated entirely.
 - SupplierInterface ABC with 3 implementations (bot, LLM, human)
 - NegotiationSessionManager for concurrent multi-supplier negotiations
 - Deep negotiation: 5-7 rounds, multi-variable (price, delivery, warranty)
-- USD-first pricing with ALGO conversion at escrow lock
+- USD pricing with USDC settlement (1:1, no conversion)
 - Structured form input (ProcurementRequest dataclass)
 - Priority-based dynamic scoring weights
 - EventBus for frontend decoupling
@@ -268,7 +268,6 @@ The `parse_procurement_goal()` regex parser from v1 is eliminated entirely.
 - Real IoT delivery triggers
 - Production PostgreSQL
 - On-chain reputation system
-- Stablecoin (ASA) payments
 - Milestone/split-funding escrow models
 
 ## Why These Decisions Were Made
@@ -278,7 +277,7 @@ The `parse_procurement_goal()` regex parser from v1 is eliminated entirely.
 - **SQLite over PostgreSQL**: Hackathon scale; zero setup; schema is simple
 - **Redis for quotes**: TTL-based expiration is perfect for short-lived RFQ windows
 - **Hash bridge**: On-chain storage is expensive; hash anchoring gives integrity without the cost
-- **USD-first**: Real businesses price in USD; ALGO is settlement infrastructure, not UX
+- **USDC settlement**: Real businesses price in USD; USDC (1:1 stablecoin) eliminates exchange rate risk
 - **SupplierInterface ABC**: Uniform protocol lets the buyer agent work with any supplier type without coupling
 - **EventBus**: Frontend is optional — agent runs identically in CLI and web modes
 - **Dynamic scoring weights**: Different buyers have different priorities; one-size-fits-all weights produce suboptimal decisions
