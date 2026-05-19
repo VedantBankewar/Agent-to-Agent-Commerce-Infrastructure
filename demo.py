@@ -309,8 +309,7 @@ def run_autonomous_agent(
             step("DEAL", f"Deal ID: {data.get('deal_id', '')}")
             step("", f"TX ID: {data.get('txid', 'N/A')}")
             step("", f"Confirmed Round: {data.get('confirmed_round', 'N/A')}")
-            step("", f"Amount: ${data.get('amount_usd', 0):,.2f} USD ({data.get('amount_algo', 0):,.2f} ALGO)")
-            step("", f"Rate: 1 ALGO = ${data.get('usd_to_algo_rate', 0)}")
+            step("", f"Amount: ${data.get('amount_usd', 0):,.2f} USDC")
             step("", f"Deal Hash: {data.get('deal_hash', '')}")
 
         elif event_type == "agent_thinking":
@@ -352,8 +351,7 @@ def run_autonomous_agent(
 
     if context.deal_id:
         print(f"\n  {GREEN}{BOLD}Deal ID: {context.deal_id}{RESET}")
-        if context.usd_to_algo_rate:
-            print(f"  USD/ALGO Rate: {context.usd_to_algo_rate}")
+        print(f"  Settlement: USDC (1:1 with USD)")
     elif context.deal_phase.value == "failed":
         print(f"\n  {RED}Agent could not complete procurement.{RESET}")
 

@@ -18,8 +18,7 @@ export default function DeployAgent() {
     total?: string;
     delivery?: string;
     amount_usd?: string;
-    amount_algo?: string;
-    usd_rate?: string;
+    amount_usdc?: string;
   }>({});
   const [quotes, setQuotes] = useState<{
     id: string;
@@ -115,15 +114,10 @@ export default function DeployAgent() {
                 if (appId) setDealDetails(prev => ({ ...prev, app_id: appId }));
               }
 
-              // Parse USD amounts
-              if (cleanData.includes('Amount:') && cleanData.includes('USD')) {
-                const usdMatch = cleanData.match(/\$([\d,]+\.?\d*)\s*USD/);
-                const algoMatch = cleanData.match(/([\d,]+\.?\d*)\s*ALGO/);
-                if (usdMatch) setDealDetails(prev => ({ ...prev, amount_usd: `$${usdMatch[1]}`, total: `$${usdMatch[1]}` }));
-                if (algoMatch) setDealDetails(prev => ({ ...prev, amount_algo: `${algoMatch[1]} ALGO` }));
-              }
-              if (cleanData.includes('Rate:') && cleanData.includes('ALGO')) {
-                setDealDetails(prev => ({ ...prev, usd_rate: cleanData.split('Rate:')[1]?.trim() }));
+              // Parse USDC amounts
+              if (cleanData.includes('Amount:') && cleanData.includes('USDC')) {
+                const usdcMatch = cleanData.match(/\$([\d,]+\.?\d*)\s*USDC/);
+                if (usdcMatch) setDealDetails(prev => ({ ...prev, amount_usd: `$${usdcMatch[1]}`, amount_usdc: `${usdcMatch[1]} USDC`, total: `$${usdcMatch[1]}` }));
               }
 
               // Parse supplier winner
@@ -203,8 +197,8 @@ export default function DeployAgent() {
                 let addressInfo = addressMatch ? ` (${addressMatch[1]})` : '';
                 setErrorAnalysis({
                   type: 'Liquidity Error',
-                  details: 'Insufficient ALGO balance detected.',
-                  solution: `Fund the wallet${addressInfo} from the Algorand Testnet Dispenser.`
+                  details: 'Insufficient ALGO balance or USDC balance detected.',
+                  solution: `Fund the wallet${addressInfo} with ALGO (for fees) from the Algorand Testnet Dispenser, and ensure USDC is available.`
                 });
                 hasFatalError = true;
               } else if (rawDataLower.includes('no llm api key') || rawDataLower.includes('api_key not set')) {
@@ -606,11 +600,8 @@ export default function DeployAgent() {
                         <div className="grid grid-cols-2 gap-4">
                           <div><span className="text-on-surface-variant text-xs">Supplier</span><br /><span className="text-white font-bold text-lg">{dealDetails.supplier}</span></div>
                           <div><span className="text-on-surface-variant text-xs">Total Cost</span><br /><span className="text-secondary font-bold text-lg">{dealDetails.total || dealDetails.amount_usd || 'Computing...'}</span></div>
-                          {dealDetails.amount_algo && (
-                            <div><span className="text-on-surface-variant text-xs">ALGO Locked</span><br /><span className="text-primary font-mono text-sm">{dealDetails.amount_algo}</span></div>
-                          )}
-                          {dealDetails.usd_rate && (
-                            <div><span className="text-on-surface-variant text-xs">Exchange Rate</span><br /><span className="text-white font-mono text-sm">{dealDetails.usd_rate}</span></div>
+                          {dealDetails.amount_usdc && (
+                            <div><span className="text-on-surface-variant text-xs">USDC Locked</span><br /><span className="text-primary font-mono text-sm">{dealDetails.amount_usdc}</span></div>
                           )}
                           {dealDetails.app_id && (
                             <div><span className="text-on-surface-variant text-xs">App ID</span><br /><span className="text-primary font-mono text-sm">{dealDetails.app_id}</span></div>
