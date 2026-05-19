@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import ProcurementForm, { type ProcurementFormData } from './ProcurementForm';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export default function DeployAgent() {
-  const [goal, setGoal] = useState("");
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [formData, setFormData] = useState<ProcurementFormData | null>(null);
   const [dealDetails, setDealDetails] = useState<{
     txid?: string;
     deal_hash?: string;
@@ -16,6 +17,9 @@ export default function DeployAgent() {
     supplier?: string;
     total?: string;
     delivery?: string;
+    amount_usd?: string;
+    amount_algo?: string;
+    usd_rate?: string;
   }>({});
   const [quotes, setQuotes] = useState<{
     id: string;
@@ -26,12 +30,18 @@ export default function DeployAgent() {
     warranty: string;
     isWinner: boolean;
   }[]>([]);
+  const [negotiations, setNegotiations] = useState<{
+    supplier: string;
+    round: number;
+    decision: string;
+    message: string;
+  }[]>([]);
 
-  const presetGoals = [
-    "Buy 50 ergonomic chairs, budget 10, by June 15",
-    "Buy 100 pens, budget 5, by May 1",
-    "Buy 10 desks, budget 20, by August 2026"
-  ];
+  const [errorAnalysis, setErrorAnalysis] = useState<{
+    type: string;
+    details: string;
+    solution: string;
+  } | null>(null);
 
   const scrollToBottom = () => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -39,21 +49,24 @@ export default function DeployAgent() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [logs]);
+  }, [logs, negotiations]);
 
-  const runPipeline = async () => {
-    if (!goal || isRunning) return;
+  const runPipeline = async (data: ProcurementFormData) => {
+    if (isRunning) return;
+    setFormData(data);
     setIsRunning(true);
     setLogs([]);
     setQuotes([]);
+    setNegotiations([]);
     setIsFinished(false);
     setDealDetails({});
+    setErrorAnalysis(null);
 
     try {
       const response = await fetch(`${API_BASE}/api/run_pipeline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal })
+        body: JSON.stringify(data)
       });
 
       if (!response.body) return;
@@ -68,45 +81,65 @@ export default function DeployAgent() {
         const lines = chunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') {
+            const rawData = line.slice(6).trim();
+            if (rawData === '[DONE]') {
               setIsFinished(true);
               setIsRunning(false);
               return;
             }
-            if (data) {
-              const cleanData = data
+            if (rawData) {
+              const cleanData = rawData
                 .replace(/[\u001b\x1b]\[[0-9;]*[a-zA-Z]/g, '')
                 .replace(/\[[0-9]{1,2}m/g, '');
-              
+
               setLogs(prev => [...prev, cleanData]);
 
-              // Background parsing for Live Profile
+              // Parse deal details from output
               if (cleanData.includes('deal_hash:')) {
-                setDealDetails(prev => ({ ...prev, deal_hash: cleanData.split('deal_hash:')[1].trim() }));
+                setDealDetails(prev => ({ ...prev, deal_hash: cleanData.split('deal_hash:')[1]?.trim() }));
+              }
+              if (cleanData.includes('Deal ID:')) {
+                setDealDetails(prev => ({ ...prev, deal_hash: cleanData.split('Deal ID:')[1]?.trim() }));
+              }
+              if (cleanData.includes('TX ID:') && !cleanData.includes('Funded')) {
+                setDealDetails(prev => ({ ...prev, txid: cleanData.split('TX ID:')[1]?.trim() }));
               }
               if (cleanData.includes('txid:') && !cleanData.includes('Funded app')) {
-                setDealDetails(prev => ({ ...prev, txid: cleanData.split('txid:')[1].trim() }));
+                setDealDetails(prev => ({ ...prev, txid: cleanData.split('txid:')[1]?.trim() }));
               }
               if (cleanData.includes('app_id:') && !cleanData.includes('Created')) {
-                setDealDetails(prev => ({ ...prev, app_id: cleanData.split('app_id:')[1].trim() }));
+                setDealDetails(prev => ({ ...prev, app_id: cleanData.split('app_id:')[1]?.trim() }));
+              }
+              if (cleanData.includes('App ID:') && !cleanData.includes('Created')) {
+                const appId = cleanData.match(/App ID:\s*(\d+)/)?.[1];
+                if (appId) setDealDetails(prev => ({ ...prev, app_id: appId }));
+              }
+
+              // Parse USD amounts
+              if (cleanData.includes('Amount:') && cleanData.includes('USD')) {
+                const usdMatch = cleanData.match(/\$([\d,]+\.?\d*)\s*USD/);
+                const algoMatch = cleanData.match(/([\d,]+\.?\d*)\s*ALGO/);
+                if (usdMatch) setDealDetails(prev => ({ ...prev, amount_usd: `$${usdMatch[1]}`, total: `$${usdMatch[1]}` }));
+                if (algoMatch) setDealDetails(prev => ({ ...prev, amount_algo: `${algoMatch[1]} ALGO` }));
+              }
+              if (cleanData.includes('Rate:') && cleanData.includes('ALGO')) {
+                setDealDetails(prev => ({ ...prev, usd_rate: cleanData.split('Rate:')[1]?.trim() }));
+              }
+
+              // Parse supplier winner
+              if (cleanData.includes('OFFER ACCEPTED')) {
+                const supplierMatch = cleanData.match(/OFFER ACCEPTED.*?(\S+)$/);
+                if (supplierMatch) setDealDetails(prev => ({ ...prev, supplier: supplierMatch[1] }));
               }
               if (cleanData.includes('winner=')) {
                 const parts = cleanData.split('winner=')[1];
-                setDealDetails(prev => ({ ...prev, supplier: parts.split('  ')[0].trim() }));
-              }
-              if (cleanData.includes('total=')) {
-                // e.g. total=$1.06  delivery=7d  warranty=2.0yr
-                const parts = cleanData.split('total=')[1].split('  ');
-                const total = parts[0];
-                const delivery = parts.find(p => p.includes('delivery='))?.split('=')[1] || '';
-                setDealDetails(prev => ({ ...prev, total, delivery }));
+                setDealDetails(prev => ({ ...prev, supplier: parts?.split('  ')[0]?.trim() }));
               }
 
-              // Quote Parsing: Pattern for "👑 ChairHub: score=94.5 | $92.00/unit | 5d | 2.0yr"
-              const quoteMatch = cleanData.match(/^\s*(👑)?\s*([^:]+):\s*score=([\d.]+)\s*\|\s*\$([\d.]+)\/unit\s*\|\s*(\d+)d\s*\|\s*([\d.]+)yr/);
+              // Parse quotes from output
+              const quoteMatch = cleanData.match(/\[QUOTE\]\s*([^:]+):\s*\$([\d.]+)\/unit\s*\|\s*(\d+)d\s*\|\s*([\d.]+)yr.*?Score:\s*([\d.]+)/);
               if (quoteMatch) {
-                const [, isWinner, supplier, score, price, delivery, warranty] = quoteMatch;
+                const [, supplier, price, delivery, warranty, score] = quoteMatch;
                 setQuotes(prev => {
                   if (prev.some(q => q.supplier === supplier.trim())) return prev;
                   return [...prev, {
@@ -116,9 +149,91 @@ export default function DeployAgent() {
                     price: `$${price}`,
                     delivery: `${delivery}d`,
                     warranty: `${warranty}yr`,
-                    isWinner: !!isWinner
+                    isWinner: false,
                   }];
                 });
+              }
+
+              // Legacy quote format
+              const legacyQuoteMatch = cleanData.match(/^\s*(crown)?\s*([^:]+):\s*score=([\d.]+)\s*\|\s*\$([\d.]+)\/unit\s*\|\s*(\d+)d\s*\|\s*([\d.]+)yr/);
+              if (legacyQuoteMatch) {
+                const [, isWinner, supplier, score, price, delivery, warranty] = legacyQuoteMatch;
+                setQuotes(prev => {
+                  if (prev.some(q => q.supplier === supplier.trim())) return prev;
+                  return [...prev, {
+                    id: Math.random().toString(36).substr(2, 9),
+                    supplier: supplier.trim(),
+                    score: parseFloat(score),
+                    price: `$${price}`,
+                    delivery: `${delivery}d`,
+                    warranty: `${warranty}yr`,
+                    isWinner: !!isWinner,
+                  }];
+                });
+              }
+
+              // Parse negotiation events
+              const counterMatch = cleanData.match(/\[(?:COUNTER ->|<- (ACCEPT|COUNTER|REJECT))\]/);
+              if (counterMatch) {
+                const decision = counterMatch[1] || 'SENT';
+                const supplierPart = cleanData.match(/(?:To|From)\s+(\S+)/)?.[1] || '';
+                const roundPart = cleanData.match(/Round\s+(\d+)/)?.[1] || '0';
+                setNegotiations(prev => [...prev, {
+                  supplier: supplierPart.substring(0, 20),
+                  round: parseInt(roundPart),
+                  decision,
+                  message: cleanData.replace(/\[.*?\]/, '').trim().substring(0, 120),
+                }]);
+              }
+
+              // Mark winner in quotes
+              if (cleanData.includes('OFFER ACCEPTED') || cleanData.includes('Winner')) {
+                setQuotes(prev => prev.map((q, i) => ({
+                  ...q,
+                  isWinner: i === 0 || cleanData.includes(q.supplier),
+                })));
+              }
+
+              // Error detection
+              const rawDataLower = cleanData.toLowerCase();
+              let hasFatalError = false;
+
+              if (rawDataLower.includes('overspend') || rawDataLower.includes('below min')) {
+                const addressMatch = cleanData.match(/([A-Z2-7]{58})/);
+                let addressInfo = addressMatch ? ` (${addressMatch[1]})` : '';
+                setErrorAnalysis({
+                  type: 'Liquidity Error',
+                  details: 'Insufficient ALGO balance detected.',
+                  solution: `Fund the wallet${addressInfo} from the Algorand Testnet Dispenser.`
+                });
+                hasFatalError = true;
+              } else if (rawDataLower.includes('no llm api key') || rawDataLower.includes('api_key not set')) {
+                setErrorAnalysis({
+                  type: 'Configuration Error',
+                  details: 'Missing LLM API key for autonomous agent.',
+                  solution: 'Add ANTHROPIC_API_KEY or OPENAI_API_KEY to the root .env file and restart.'
+                });
+                hasFatalError = true;
+              } else if (rawDataLower.includes('no suppliers found')) {
+                setErrorAnalysis({
+                  type: 'Market Discovery Error',
+                  details: 'No suppliers match the requested category.',
+                  solution: 'Ensure supplier data is seeded in the database.'
+                });
+                hasFatalError = true;
+              } else if (rawDataLower.includes('no deploy_config.json')) {
+                setErrorAnalysis({
+                  type: 'Deployment Error',
+                  details: 'Missing smart contract deployment configuration.',
+                  solution: 'Run contracts/deploy.py first to deploy the escrow contract.'
+                });
+                hasFatalError = true;
+              }
+
+              if (hasFatalError) {
+                setIsRunning(false);
+                try { await reader.cancel(); } catch (e) {}
+                return;
               }
             }
           }
@@ -133,16 +248,16 @@ export default function DeployAgent() {
   const releaseFunds = async () => {
     try {
       setIsFinished(false);
-      setLogs(prev => [...prev, "\n=> TRIGGERING RELEASE_FUNDS.PY...\n"]);
+      setLogs(prev => [...prev, "\n=> TRIGGERING DELIVERY PROOF & PAYMENT RELEASE...\n"]);
       const response = await fetch(`${API_BASE}/api/release_funds`, { method: 'POST' });
       if (!response.body) return;
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n');
         for (const line of lines) {
@@ -157,9 +272,10 @@ export default function DeployAgent() {
                 .replace(/[\u001b\x1b]\[[0-9;]*[a-zA-Z]/g, '')
                 .replace(/\[[0-9]{1,2}m/g, '');
               setLogs(prev => [...prev, cleanData]);
-              
-              if (cleanData.includes('txid:')) {
-                 setDealDetails(prev => ({ ...prev, txid: cleanData.split('txid:')[1].trim() }));
+
+              if (cleanData.includes('txid:') || cleanData.includes('TX ID:')) {
+                const txid = cleanData.match(/(?:txid|TX ID):\s*(\S+)/)?.[1];
+                if (txid) setDealDetails(prev => ({ ...prev, txid }));
               }
             }
           }
@@ -175,39 +291,34 @@ export default function DeployAgent() {
   const getPipelineStage = () => {
     if (!isRunning && !isFinished) return 0;
     const recent = logs.join(" ");
-    
-    // Stage 4: Execution / On-chain
-    if (isFinished || recent.includes("Locking escrow") || recent.includes("TRIGGERING RELEASE")) return 4;
-    // Stage 3: Logic / Algorithmic Selection
-    if (recent.includes("Quotes scored") || recent.includes("Winner:")) return 3;
-    // Stage 2: Nodes / Agent Negotiation
-    if (recent.includes("RFQ broadcast") || recent.includes("generate_supplier_quotes")) return 2;
-    // Stage 1: Identity / Market Discovery
-    if (recent.includes("search") || recent.includes("Deploying")) return 1;
-    
+    if (isFinished || recent.includes("ESCROW LOCKED") || recent.includes("TRIGGERING")) return 4;
+    if (recent.includes("OFFER ACCEPTED") || recent.includes("COUNTER") || recent.includes("counter")) return 3;
+    if (recent.includes("QUOTE") || recent.includes("quote") || recent.includes("RFQ")) return 2;
+    if (recent.includes("DISCOVER") || recent.includes("search") || recent.includes("Deploying")) return 1;
     return 1;
   };
 
   const pipelineStage = getPipelineStage();
 
   const pipelineSteps = [
-    { label: "IDENTITY", sub: pipelineStage > 1 ? "Verified" : pipelineStage === 1 ? "Discovering" : "Waiting", active: pipelineStage >= 1 },
-    { label: "NODES", sub: pipelineStage > 2 ? "Allocated" : pipelineStage === 2 ? "Negotiating" : "Queued", active: pipelineStage >= 2 },
-    { label: "LOGIC", sub: pipelineStage > 3 ? "Computed" : pipelineStage === 3 ? "Scoring" : "Queued", active: pipelineStage >= 3 },
-    { label: "EXECUTION", sub: isFinished ? "Settled" : pipelineStage === 4 ? "Compiling" : "Queued", active: pipelineStage >= 4 },
+    { label: "DISCOVERY", sub: pipelineStage > 1 ? "Complete" : pipelineStage === 1 ? "Searching" : "Waiting", active: pipelineStage >= 1 },
+    { label: "QUOTING", sub: pipelineStage > 2 ? "Received" : pipelineStage === 2 ? "Collecting" : "Queued", active: pipelineStage >= 2 },
+    { label: "NEGOTIATION", sub: pipelineStage > 3 ? "Agreed" : pipelineStage === 3 ? "Negotiating" : "Queued", active: pipelineStage >= 3 },
+    { label: "ESCROW", sub: isFinished ? "Settled" : pipelineStage === 4 ? "Locking" : "Queued", active: pipelineStage >= 4 },
   ];
 
   const currentStep = () => {
     if (!isRunning && !isFinished) return "Waiting to start...";
     const recent = logs.slice(-10).join(" ");
-    if (recent.includes("Searching") || recent.includes("search")) return "Discovering Suppliers";
-    if (recent.includes("RFQ broadcast")) return "Negotiating Details";
-    if (recent.includes("Quotes scored")) return "Evaluating Options";
-    if (recent.includes("Locking escrow")) return "Anchoring Smart Contract";
-    if (recent.includes("TRIGGERING RELEASE")) return "Verifying Delivery Proof";
+    if (recent.includes("DISCOVER") || recent.includes("search")) return "Discovering Suppliers";
+    if (recent.includes("QUOTE") || recent.includes("RFQ")) return "Collecting Quotes";
+    if (recent.includes("COUNTER") || recent.includes("NEGOTIAT")) return "Deep Negotiation";
+    if (recent.includes("OFFER ACCEPTED")) return "Deal Agreed";
+    if (recent.includes("ESCROW LOCKED")) return "Escrow Locked on Algorand";
+    if (recent.includes("TRIGGERING")) return "Verifying Delivery Proof";
     if (isFinished && dealDetails.txid) return "Funds Successfully Released";
-    if (isFinished) return "Escrow Locked";
-    return "Processing...";
+    if (isFinished) return "Procurement Complete";
+    return "Agent Reasoning...";
   };
 
   return (
@@ -219,294 +330,318 @@ export default function DeployAgent() {
 
       {/* Main Content Canvas */}
       <main className="w-full flex-1 flex flex-col px-6 relative py-20 items-center">
-        
+
         {/* Ambient Background Glow */}
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
         <div className="fixed top-1/3 left-1/4 w-[300px] h-[300px] bg-secondary/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
 
         <section className="w-full max-w-screen-2xl z-10 flex flex-col gap-8">
-          
-          {/* Header Group */}
+
+          {/* Header */}
           <div className="mb-12 text-center mt-8">
-            <span className="text-[10px] font-bold tracking-[0.2em] text-secondary uppercase mb-3 block">New Deployment</span>
+            <span className="text-[10px] font-bold tracking-[0.2em] text-secondary uppercase mb-3 block">New Procurement</span>
             <h1 className="text-4xl md:text-6xl font-headline font-extrabold text-on-surface tracking-tight leading-none mb-4">
-              Procurement <span className="text-primary italic">Agent</span>
+              Autonomous <span className="text-primary italic">Agent</span>
             </h1>
             <p className="text-on-surface-variant/70 text-lg max-w-xl mx-auto font-body">
-              Define the objective, set the parameters, and let the Oracle execute across the multi-chain ecosystem.
+              Define your procurement requirements. The autonomous agent will discover suppliers, negotiate deeply, and lock escrow on Algorand.
             </p>
           </div>
 
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6">
-          
-          {/* Left Column */}
-          <div className="flex flex-col gap-6">
-            
-            {/* Goal Card */}
-            <div className="bg-surface-container-low border border-outline-variant/10 rounded-xl p-8 transition-all duration-500 shadow-xl">
-              <div className="flex items-center gap-3 mb-8">
-                <span className="material-symbols-outlined text-primary text-2xl">rocket_launch</span>
-                <h2 className="text-xl font-bold text-on-surface font-headline tracking-wide">Procurement Goal</h2>
+          {/* Dashboard Grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6">
+
+            {/* Left Column */}
+            <div className="flex flex-col gap-6">
+
+              {/* Procurement Form Card */}
+              <div className="bg-surface-container-low border border-outline-variant/10 rounded-xl p-8 transition-all duration-500 shadow-xl">
+                <div className="flex items-center gap-3 mb-8">
+                  <span className="material-symbols-outlined text-primary text-2xl">rocket_launch</span>
+                  <h2 className="text-xl font-bold text-on-surface font-headline tracking-wide">Procurement Request</h2>
+                  {formData && (
+                    <span className={`ml-auto text-[10px] font-bold uppercase px-3 py-1 rounded-full ${
+                      formData.priority === 'cost' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                      formData.priority === 'speed' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                      formData.priority === 'quality' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                      'bg-white/5 text-white/60 border border-white/10'
+                    }`}>
+                      {formData.priority} priority
+                    </span>
+                  )}
+                </div>
+                <ProcurementForm onSubmit={runPipeline} disabled={isRunning} />
               </div>
-              
-              <div className="flex flex-col md:flex-row gap-4 mb-4">
-                <div className="flex-1 bg-[#111111] border border-white/10 rounded-xl focus-within:border-primary/50 transition-colors">
-                  <input 
-                    type="text" 
-                    value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
-                    placeholder="Buy 50 ergonomic chairs, budget 300000, by June 15"
-                    className="w-full bg-transparent border-none text-white placeholder:text-on-surface-variant/40 px-4 py-4 font-body outline-none text-sm md:text-base font-mono"
-                    disabled={isRunning}
+
+              {/* Readiness Pipeline Card */}
+              <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center">
+                <div className="w-full flex justify-between items-center mb-6">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">Agent Pipeline</h3>
+                  <span className="text-[10px] font-label text-secondary px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
+                    {isRunning ? 'Active' : isFinished ? 'Completed' : 'Idle'}
+                  </span>
+                </div>
+
+                <div className="w-full h-[2px] bg-surface-container-highest relative mt-4 mb-8 overflow-hidden">
+                  <div
+                    className="absolute top-0 left-0 h-full bg-pipeline-gradient transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(249,171,255,0.4)]"
+                    style={{ width: `${pipelineStage === 0 ? 0 : (pipelineStage / 4) * 100}%` }}
                   />
                 </div>
-                <button 
-                  onClick={runPipeline}
-                  disabled={isRunning || !goal.trim()}
-                  className={`px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                    isRunning || !goal.trim() 
-                      ? 'bg-outline-variant text-white/50 cursor-not-allowed' 
-                      : 'bg-gradient-to-r from-primary-container to-primary text-white hover:opacity-90 shadow-[0_0_20px_rgba(249,171,255,0.3)] active:scale-95'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-sm">{isRunning ? 'hourglass_empty' : 'rocket_launch'}</span>
-                  <span>{isRunning ? 'Running...' : 'Run Pipeline'}</span>
-                </button>
-              </div>
 
-              <div className="flex flex-wrap gap-2">
-                {presetGoals.map((preset, idx) => (
-                  <button 
-                    key={idx}
-                    onClick={() => setGoal(preset)}
-                    className="bg-surface-container-highest/20 border border-outline-variant/10 px-4 py-2 rounded-full text-xs text-on-surface-variant/80 hover:bg-surface-container-highest/40 transition-colors text-left"
-                    disabled={isRunning}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Readiness Pipeline Card */}
-            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center">
-              <div className="w-full flex justify-between items-center mb-6">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">Readiness Pipeline</h3>
-                <span className="text-[10px] font-label text-secondary px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
-                  {isRunning ? 'Optimizing...' : isFinished ? 'Completed' : 'Idle'}
-                </span>
-              </div>
-
-              {/* Graphical Bar */}
-              <div className="w-full h-[2px] bg-surface-container-highest relative mt-4 mb-8 overflow-hidden">
-                <div 
-                  className="absolute top-0 left-0 h-full bg-pipeline-gradient transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(249,171,255,0.4)]"
-                  style={{ width: `${pipelineStage === 0 ? 0 : (pipelineStage / 4) * 100}%` }}
-                >
-                </div>
-              </div>
-
-              {/* Labels */}
-              <div className="w-full grid grid-cols-4 gap-4">
-                {pipelineSteps.map((step, idx) => (
-                  <div key={idx} className={`flex flex-col gap-1 ${step.active ? 'opacity-100' : 'opacity-30'}`}>
-                    <span className={`text-[10px] font-bold uppercase ${
-                      step.active && step.sub !== 'Queued' ? 'text-primary' : 'text-on-surface-variant'
-                    }`}>
-                      {step.label}
-                    </span>
-                    <span className="text-xs text-on-surface-variant/80">{step.sub}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Comparison Grid (Logic Phase) */}
-            {(quotes.length > 0) && (
-              <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col transition-all animate-in fade-in zoom-in duration-700">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-secondary tracking-widest mb-1">Comparative Analysis</span>
-                    <h2 className="font-headline font-bold text-white tracking-wide">Multi-Agent Bidding</h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-full border border-white/10">
-                    <span className="text-[10px] font-bold text-on-surface-variant uppercase">{quotes.length} {quotes.length === 1 ? 'Quote' : 'Quotes'} Received</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {quotes.sort((a,b) => b.score - a.score).map((quote) => (
-                    <div 
-                      key={quote.id} 
-                      className={`relative flex flex-col p-5 rounded-2xl border transition-all duration-500 ${
-                        quote.isWinner 
-                        ? 'bg-gradient-to-br from-primary/10 to-transparent border-primary/40 shadow-[0_0_20px_rgba(249,171,255,0.1)] scale-105 z-10 shimmer-bg' 
-                        : 'bg-[#111111] border-white/5 opacity-70 grayscale-[0.3]'
-                      }`}
-                    >
-                      {quote.isWinner && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-on-primary text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1 uppercase tracking-tight">
-                          <span className="material-symbols-outlined text-[12px]">award</span>
-                          Winner Selected
-                        </div>
-                      )}
-                      
-                      <div className="flex flex-col mb-4">
-                        <span className={`text-xs font-bold uppercase tracking-widest mb-1 ${quote.isWinner ? 'text-primary' : 'text-on-surface-variant'}`}>{quote.supplier}</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-bold font-headline text-white">{quote.score}</span>
-                          <span className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">/100</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3 pt-4 border-t border-white/5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-on-surface-variant">Price</span>
-                          <span className="text-white font-mono font-bold">{quote.price}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-on-surface-variant">Speed</span>
-                          <span className="text-white font-bold">{quote.delivery}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-on-surface-variant">Warranty</span>
-                          <span className="text-white font-bold">{quote.warranty}</span>
-                        </div>
-                      </div>
-
-                      {quote.isWinner && (
-                        <div className="mt-4 pt-3 flex justify-center">
-                           <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></div>
-                        </div>
-                      )}
+                <div className="w-full grid grid-cols-4 gap-4">
+                  {pipelineSteps.map((s, idx) => (
+                    <div key={idx} className={`flex flex-col gap-1 ${s.active ? 'opacity-100' : 'opacity-30'}`}>
+                      <span className={`text-[10px] font-bold uppercase ${
+                        s.active && s.sub !== 'Queued' ? 'text-primary' : 'text-on-surface-variant'
+                      }`}>
+                        {s.label}
+                      </span>
+                      <span className="text-xs text-on-surface-variant/80">{s.sub}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
 
-            {/* System Feed (Collapsible) */}
-            <div className={`bg-surface-container-low border border-white/5 rounded-2xl flex flex-col shadow-xl overflow-hidden transition-all duration-300 ${logsHeight === 'expanded' ? 'h-[300px]' : 'h-[60px]'}`}>
-              <button 
-                onClick={() => setLogsHeight(prev => prev === 'expanded' ? 'collapsed' : 'expanded')}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-white/50">terminal</span>
-                  <span className="text-xs font-bold text-white tracking-widest uppercase">System Feed</span>
-                </div>
-                <span className="material-symbols-outlined text-white/50 text-[18px]">
-                  {logsHeight === 'expanded' ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
-              
-              <div className="flex-1 bg-[#0a080c] p-4 overflow-y-auto font-mono text-[11px] md:text-xs text-on-surface-variant whitespace-pre-wrap leading-relaxed scrollbar-hide border-t border-white/5">
-                {logs.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-on-surface-variant/40">
-                    Awaiting initialization...
+              {/* Multi-Agent Bidding Grid */}
+              {quotes.length > 0 && (
+                <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col transition-all animate-in fade-in zoom-in duration-700">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase font-bold text-secondary tracking-widest mb-1">Comparative Analysis</span>
+                      <h2 className="font-headline font-bold text-white tracking-wide">Multi-Agent Bidding</h2>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+                      <span className="text-[10px] font-bold text-on-surface-variant uppercase">{quotes.length} {quotes.length === 1 ? 'Quote' : 'Quotes'}</span>
+                    </div>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    {logs.map((log, i) => (
-                      <span key={i} className={`
-                        ${log.includes('=>') ? 'text-primary font-bold mt-2' : ''}
-                        ${log.includes('Error') || log.includes('Failed') ? 'text-error' : ''}
-                        ${log.includes('SUCCESS') || log.includes('COMPLETED') ? 'text-secondary font-bold' : ''}
-                        ${log.includes('Goal:') || log.includes('Winner:') ? 'text-white font-bold' : ''}
-                      `}>
-                        {log}
-                      </span>
-                    ))}
-                    <div ref={logsEndRef} />
-                  </div>
-                )}
-              </div>
-            </div>
 
-          </div>
-
-          {/* Right Column: Live Transactional Profile Card */}
-          <div className="bg-transparent border border-white/5 rounded-3xl overflow-hidden shadow-2xl flex flex-col relative h-full min-h-[500px]">
-            {/* Header/Tracking state */}
-            <div className="bg-surface-container-low p-6 border-b border-white/5 flex items-center justify-between z-10 relative">
-               <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-on-surface-variant mb-1">State Profile</span>
-                  <h3 className="text-xl font-bold font-headline text-white">{currentStep()}</h3>
-               </div>
-               <div className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${
-                 isRunning ? 'bg-primary/20 border-primary/50 text-primary animate-pulse' : 
-                 isFinished && dealDetails.txid ? 'bg-secondary/20 border-secondary/50 text-secondary' : 
-                 'bg-white/5 border-white/10 text-white/30'
-               }`}>
-                 <span className="material-symbols-outlined">{isRunning ? 'sync' : isFinished && dealDetails.txid ? 'task_alt' : 'bolt'}</span>
-               </div>
-            </div>
-
-            {/* Ambient Background Behind Content */}
-            <div className="absolute inset-x-0 bottom-0 top-24 overflow-hidden pointer-events-none z-0">
-               <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full blur-[120px] transition-all duration-1000 ${
-                 isRunning ? 'bg-primary/10' : isFinished ? 'bg-secondary/10' : 'bg-transparent'
-               }`}></div>
-            </div>
-
-            {/* Profile Content */}
-            <div className="flex-1 p-8 relative z-10 flex flex-col justify-center">
-              {!dealDetails.supplier && !isRunning && !isFinished ? (
-                 <div className="flex flex-col items-center justify-center text-center text-on-surface-variant/50 h-full">
-                    <span className="material-symbols-outlined text-4xl mb-4">account_balance_wallet</span>
-                    <p>Awaiting procurement request to generate on-chain deal variables...</p>
-                 </div>
-              ) : (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col gap-6">
-                   
-                   {/* Deal High-level Summary */}
-                   <div className="bg-[#111111] border border-white/5 rounded-2xl p-6">
-                      <h4 className="text-white text-sm font-bold uppercase tracking-wider mb-6 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary text-sm">handshake</span> Active Deal
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-on-surface-variant text-xs mb-1">Supplier</span>
-                          <span className="text-white font-bold text-lg">{dealDetails.supplier || 'Negotiating...'}</span>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {quotes.sort((a, b) => b.score - a.score).map((quote) => (
+                      <div
+                        key={quote.id}
+                        className={`relative flex flex-col p-5 rounded-2xl border transition-all duration-500 ${
+                          quote.isWinner
+                            ? 'bg-gradient-to-br from-primary/10 to-transparent border-primary/40 shadow-[0_0_20px_rgba(249,171,255,0.1)] scale-105 z-10'
+                            : 'bg-[#111111] border-white/5 opacity-70 grayscale-[0.3]'
+                        }`}
+                      >
+                        {quote.isWinner && (
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-on-primary text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1 uppercase tracking-tight">
+                            <span className="material-symbols-outlined text-[12px]">award</span>
+                            Winner
+                          </div>
+                        )}
+                        <div className="flex flex-col mb-4">
+                          <span className={`text-xs font-bold uppercase tracking-widest mb-1 ${quote.isWinner ? 'text-primary' : 'text-on-surface-variant'}`}>{quote.supplier}</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-3xl font-bold font-headline text-white">{quote.score}</span>
+                            <span className="text-[10px] text-on-surface-variant uppercase font-bold">/100</span>
+                          </div>
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-on-surface-variant text-xs mb-1">Total Cost</span>
-                          <span className="text-secondary font-bold text-lg">{dealDetails.total || 'Computing...'}</span>
-                        </div>
-                        <div className="flex flex-col mt-2">
-                          <span className="text-on-surface-variant text-xs mb-1">Contract App ID</span>
-                          <span className="text-primary font-mono text-sm">{dealDetails.app_id || 'Staging...'}</span>
-                        </div>
-                        <div className="flex flex-col mt-2">
-                          <span className="text-on-surface-variant text-xs mb-1">Lead Time</span>
-                          <span className="text-white font-mono text-sm">{dealDetails.delivery || 'TBD'}</span>
+                        <div className="space-y-3 pt-4 border-t border-white/5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-on-surface-variant">Price</span>
+                            <span className="text-white font-mono font-bold">{quote.price}/unit</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-on-surface-variant">Delivery</span>
+                            <span className="text-white font-bold">{quote.delivery}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-on-surface-variant">Warranty</span>
+                            <span className="text-white font-bold">{quote.warranty}</span>
+                          </div>
                         </div>
                       </div>
-                   </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                   {/* Blockchain Hashes (Glassmorphism Receipt) */}
-                   <div className="bg-gradient-to-br from-white/5 to-transparent border border-white/10 rounded-2xl p-6 backdrop-blur-md">
+              {/* Negotiation Timeline */}
+              {negotiations.length > 0 && (
+                <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-6 shadow-xl flex flex-col">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="material-symbols-outlined text-primary text-sm">forum</span>
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">Negotiation Timeline</h3>
+                    <span className="ml-auto text-[10px] text-on-surface-variant/40">{negotiations.length} messages</span>
+                  </div>
+                  <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto scrollbar-hide">
+                    {negotiations.map((n, i) => (
+                      <div key={i} className={`flex items-start gap-3 text-xs px-3 py-2 rounded-lg ${
+                        n.decision === 'ACCEPT' ? 'bg-green-500/5 border border-green-500/10' :
+                        n.decision === 'REJECT' ? 'bg-red-500/5 border border-red-500/10' :
+                        'bg-white/[0.02] border border-white/5'
+                      }`}>
+                        <span className={`text-[10px] font-bold uppercase w-16 flex-shrink-0 ${
+                          n.decision === 'ACCEPT' ? 'text-green-400' :
+                          n.decision === 'REJECT' ? 'text-red-400' :
+                          n.decision === 'SENT' ? 'text-blue-400' :
+                          'text-yellow-400'
+                        }`}>
+                          R{n.round} {n.decision}
+                        </span>
+                        <span className="text-on-surface-variant/70 truncate">{n.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* System Feed (Collapsible) */}
+              <div className={`bg-surface-container-low border border-white/5 rounded-2xl flex flex-col shadow-xl overflow-hidden transition-all duration-300 ${logsHeight === 'expanded' ? 'h-[300px]' : 'h-[60px]'}`}>
+                <button
+                  onClick={() => setLogsHeight(prev => prev === 'expanded' ? 'collapsed' : 'expanded')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-white/50">terminal</span>
+                    <span className="text-xs font-bold text-white tracking-widest uppercase">System Feed</span>
+                  </div>
+                  <span className="material-symbols-outlined text-white/50 text-[18px]">
+                    {logsHeight === 'expanded' ? 'expand_less' : 'expand_more'}
+                  </span>
+                </button>
+
+                <div className="flex-1 bg-[#0a080c] p-4 overflow-y-auto font-mono text-[11px] md:text-xs text-on-surface-variant whitespace-pre-wrap leading-relaxed scrollbar-hide border-t border-white/5">
+                  {logs.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-on-surface-variant/40">
+                      Awaiting initialization...
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {logs.map((log, i) => (
+                        <span key={i} className={`
+                          ${log.includes('=>') ? 'text-primary font-bold mt-2' : ''}
+                          ${log.includes('Error') || log.includes('FAIL') ? 'text-error' : ''}
+                          ${log.includes('OK') || log.includes('COMPLETED') ? 'text-secondary font-bold' : ''}
+                          ${log.includes('QUOTE') || log.includes('COUNTER') ? 'text-blue-400' : ''}
+                          ${log.includes('ACCEPTED') ? 'text-green-400 font-bold' : ''}
+                        `}>
+                          {log}
+                        </span>
+                      ))}
+                      <div ref={logsEndRef} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Error Analysis */}
+              {errorAnalysis && (
+                <div className="bg-[#1e0a0a] border border-error/20 rounded-2xl p-6 shadow-xl flex flex-col transition-all animate-in fade-in slide-in-from-top-4 duration-500 mt-2">
+                  <div className="flex items-center gap-3 mb-4 border-b border-error/10 pb-3">
+                    <div className="w-8 h-8 rounded-full bg-error/10 flex items-center justify-center text-error border border-error/20">
+                      <span className="material-symbols-outlined text-sm">warning</span>
+                    </div>
+                    <div>
+                      <h3 className="text-error font-bold font-headline tracking-wide">{errorAnalysis.type}</h3>
+                      <p className="text-xs text-error/70">{errorAnalysis.details}</p>
+                    </div>
+                  </div>
+                  <div className="bg-[#111111] border border-white/5 rounded-xl p-4">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary mb-2 block">Suggested Solution</span>
+                    <p className="text-sm text-white/90 leading-relaxed font-body">{errorAnalysis.solution}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Live State Profile */}
+            <div className="bg-transparent border border-white/5 rounded-3xl overflow-hidden shadow-2xl flex flex-col relative h-full min-h-[500px]">
+              {/* Header */}
+              <div className="bg-surface-container-low p-6 border-b border-white/5 flex items-center justify-between z-10 relative">
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-on-surface-variant mb-1">State Profile</span>
+                  <h3 className="text-xl font-bold font-headline text-white">{currentStep()}</h3>
+                </div>
+                <div className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${
+                  isRunning ? 'bg-primary/20 border-primary/50 text-primary animate-pulse' :
+                  isFinished && dealDetails.txid ? 'bg-secondary/20 border-secondary/50 text-secondary' :
+                  'bg-white/5 border-white/10 text-white/30'
+                }`}>
+                  <span className="material-symbols-outlined">{isRunning ? 'sync' : isFinished && dealDetails.txid ? 'task_alt' : 'bolt'}</span>
+                </div>
+              </div>
+
+              {/* Ambient Background */}
+              <div className="absolute inset-x-0 bottom-0 top-24 overflow-hidden pointer-events-none z-0">
+                <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full blur-[120px] transition-all duration-1000 ${
+                  isRunning ? 'bg-primary/10' : isFinished ? 'bg-secondary/10' : 'bg-transparent'
+                }`}></div>
+              </div>
+
+              {/* Profile Content */}
+              <div className="flex-1 p-8 relative z-10 flex flex-col justify-center">
+                {!formData && !isRunning && !isFinished ? (
+                  <div className="flex flex-col items-center justify-center text-center text-on-surface-variant/50 h-full">
+                    <span className="material-symbols-outlined text-4xl mb-4">account_balance_wallet</span>
+                    <p>Fill out the procurement form and deploy the autonomous agent...</p>
+                  </div>
+                ) : (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col gap-6">
+
+                    {/* Request Summary */}
+                    {formData && (
+                      <div className="bg-[#111111] border border-white/5 rounded-2xl p-6">
+                        <h4 className="text-white text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-sm">description</span> Request
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div><span className="text-on-surface-variant">Product</span><br /><span className="text-white font-bold">{formData.item}</span></div>
+                          <div><span className="text-on-surface-variant">Quantity</span><br /><span className="text-white font-bold">{formData.quantity}</span></div>
+                          <div><span className="text-on-surface-variant">Budget</span><br /><span className="text-secondary font-bold">${formData.budget_usd.toLocaleString()}</span></div>
+                          <div><span className="text-on-surface-variant">Deadline</span><br /><span className="text-white font-bold">{formData.deadline}</span></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Active Deal */}
+                    {dealDetails.supplier && (
+                      <div className="bg-[#111111] border border-white/5 rounded-2xl p-6">
+                        <h4 className="text-white text-sm font-bold uppercase tracking-wider mb-6 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-sm">handshake</span> Active Deal
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div><span className="text-on-surface-variant text-xs">Supplier</span><br /><span className="text-white font-bold text-lg">{dealDetails.supplier}</span></div>
+                          <div><span className="text-on-surface-variant text-xs">Total Cost</span><br /><span className="text-secondary font-bold text-lg">{dealDetails.total || dealDetails.amount_usd || 'Computing...'}</span></div>
+                          {dealDetails.amount_algo && (
+                            <div><span className="text-on-surface-variant text-xs">ALGO Locked</span><br /><span className="text-primary font-mono text-sm">{dealDetails.amount_algo}</span></div>
+                          )}
+                          {dealDetails.usd_rate && (
+                            <div><span className="text-on-surface-variant text-xs">Exchange Rate</span><br /><span className="text-white font-mono text-sm">{dealDetails.usd_rate}</span></div>
+                          )}
+                          {dealDetails.app_id && (
+                            <div><span className="text-on-surface-variant text-xs">App ID</span><br /><span className="text-primary font-mono text-sm">{dealDetails.app_id}</span></div>
+                          )}
+                          {dealDetails.delivery && (
+                            <div><span className="text-on-surface-variant text-xs">Lead Time</span><br /><span className="text-white font-mono text-sm">{dealDetails.delivery}</span></div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cryptographic Verification */}
+                    <div className="bg-gradient-to-br from-white/5 to-transparent border border-white/10 rounded-2xl p-6 backdrop-blur-md">
                       <h4 className="text-white text-sm font-bold uppercase tracking-wider mb-4 border-b border-white/5 pb-2">
                         Cryptographic Verification
                       </h4>
-                      
                       <div className="flex flex-col gap-4 mt-4">
                         <div className="flex flex-col break-all">
                           <span className="text-on-surface-variant text-[10px] uppercase mb-1 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[12px]">fingerprint</span> Algorand Hash
+                            <span className="material-symbols-outlined text-[12px]">fingerprint</span> Deal Hash
                           </span>
                           <span className="text-white/80 font-mono text-xs">{dealDetails.deal_hash || 'Building cryptographic proof...'}</span>
                         </div>
-                        
                         <div className="flex flex-col break-all mt-2">
                           <span className="text-on-surface-variant text-[10px] uppercase mb-1 flex items-center gap-1">
                             <span className="material-symbols-outlined text-[12px]">receipt_long</span> Transaction ID
                           </span>
                           {dealDetails.txid ? (
-                            <a 
-                              href={`https://lora.algokit.io/testnet/transaction/${dealDetails.txid}`} 
-                              target="_blank" 
+                            <a
+                              href={`https://lora.algokit.io/testnet/transaction/${dealDetails.txid}`}
+                              target="_blank"
                               rel="noreferrer"
                               className="text-primary hover:text-primary-container hover:underline font-mono text-xs flex items-center gap-1 transition-all"
                             >
@@ -517,39 +652,37 @@ export default function DeployAgent() {
                           )}
                         </div>
                       </div>
-                   </div>
+                    </div>
 
-                   {/* Action Required: Fake the Delivery */}
-                   {isFinished && (
+                    {/* Delivery Action */}
+                    {isFinished && (
                       <div className="mt-2 text-center animate-pulse">
-                         <span className="text-xs text-secondary mb-4 block">Simulation required: Trigger physical delivery to execute <b>Payment Release</b> via contract validation.</span>
-                         <button 
+                        <span className="text-xs text-secondary mb-4 block">Trigger delivery confirmation to release escrowed funds via smart contract.</span>
+                        <button
                           onClick={releaseFunds}
-                           className="bg-[#241a00] border border-secondary/30 text-secondary hover:bg-secondary/20 px-8 py-3 rounded-full font-bold transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,215,153,0.1)] active:scale-95 w-full uppercase tracking-widest text-xs"
-                         >
-                           <span className="material-symbols-outlined text-sm">local_shipping</span>
+                          className="bg-[#241a00] border border-secondary/30 text-secondary hover:bg-secondary/20 px-8 py-3 rounded-full font-bold transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,215,153,0.1)] active:scale-95 w-full uppercase tracking-widest text-xs"
+                        >
+                          <span className="material-symbols-outlined text-sm">local_shipping</span>
                           Confirm Item Received
-                         </button>
+                        </button>
                       </div>
-                   )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-        </div>
         </section>
 
-        {/* Contextual "Agent Pulse" Decorative Element */}
+        {/* Agent Pulse */}
         <div className="fixed bottom-12 right-12 hidden lg:flex items-center justify-center bg-surface-container-low/40 backdrop-blur-md p-4 rounded-xl border border-outline-variant/10 z-50">
           <div className="relative">
             <div className="absolute inset-0 rounded-full bg-secondary w-2 h-2 m-auto"></div>
             <div className="w-10 h-10 rounded-full border border-primary/20 animate-pulse opacity-30"></div>
-            <div className="absolute inset-[-8px] rounded-full border border-primary/10 animate-pulse opacity-10"></div>
           </div>
           <div className="ml-4">
-            <div className="text-[10px] font-bold text-on-surface tracking-widest uppercase">Oracle Pulse</div>
-            <div className="text-[10px] text-on-surface-variant/50">Steady • {isRunning ? '12ms' : '24ms'} Latency</div>
+            <div className="text-[10px] font-bold text-on-surface tracking-widest uppercase">Agent Status</div>
+            <div className="text-[10px] text-on-surface-variant/50">{isRunning ? 'Autonomous Mode' : 'Standby'}</div>
           </div>
         </div>
       </main>
