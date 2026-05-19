@@ -8,14 +8,18 @@ On-chain state (global keys):
   s  (uint64) — state value (0=IDLE 1=LOCKED 2=DELIVERED 3=COMPLETED 4=REFUNDED)
   b  (bytes)  — buyer Algorand address
   u  (bytes)  — supplier Algorand address
-  a  (uint64) — escrow amount in microALGO
+  a  (uint64) — escrow amount in micro-USDC (6 decimals)
   h  (bytes)  — SHA-256 deal terms hash
   d  (uint64) — delivery deadline as Unix timestamp
   p  (bytes)  — SHA-256 delivery proof hash
+  t  (uint64) — USDC ASA ID (token)
 
 Group transaction layout for lock:
-  tx[0] = Payment from buyer → escrow contract address
+  tx[0] = AssetTransfer (USDC) from buyer → escrow contract address
   tx[1] = AppCall to lock(seller, deal_hash, deadline_ts)
+
+The contract must be opted-in to the USDC ASA before receiving transfers.
+Use the "optin_asset" app call to opt-in (creator only).
 """
 
 from __future__ import annotations
@@ -75,9 +79,7 @@ KEY_AMOUNT = Bytes("a")
 KEY_HASH   = Bytes("h")
 KEY_DEADLN = Bytes("d")
 KEY_PROOF  = Bytes("p")
-
-# Minimum balance: 0.1 ALGO in microALGO
-MBR_MIN = Int(100_000)
+KEY_TOKEN  = Bytes("t")  # USDC ASA ID
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +119,8 @@ def approval_program():
             Return(Int(1)),  # App creation — always approve
         ),
         Cond(
+            [Txn.application_args[0] == Bytes("optin_asset"),
+             handle_optin_asset()],
             [Txn.application_args[0] == Bytes("lock"),
              handle_lock()],
             [Txn.application_args[0] == Bytes("deliver"),
@@ -149,8 +153,34 @@ def approval_program():
 
 
 # ---------------------------------------------------------------------------
+# handle_optin_asset
+# Creator-only: opt the contract into a USDC ASA so it can receive transfers.
+# app_args[1] = ASA ID as big-endian uint64 (8 bytes)
+# ---------------------------------------------------------------------------
+
+def handle_optin_asset():
+    asset_id = Btoi(Txn.application_args[1])
+    return Seq(
+        Assert(is_creator()),
+        Assert(state_is(STATE_IDLE)),
+        # Store the token ASA ID
+        App.globalPut(KEY_TOKEN, asset_id),
+        # Inner txn: opt-in by sending 0 of the ASA to self
+        InnerTxnBuilder.Begin(),
+        InnerTxnBuilder.SetFields({
+            TxnField.type_enum: TxnType.AssetTransfer,
+            TxnField.xfer_asset: asset_id,
+            TxnField.asset_amount: Int(0),
+            TxnField.asset_receiver: Global.current_application_address(),
+        }),
+        InnerTxnBuilder.Submit(),
+        Return(Int(1)),
+    )
+
+
+# ---------------------------------------------------------------------------
 # handle_lock
-# Called in a group: [Payment -> escrow, AppCall]
+# Called in a group: [AssetTransfer (USDC) -> escrow, AppCall]
 # app_args[1] = seller address (58-char Algorand string address)
 # app_args[2] = deal_hash (bytes, "sha256:...")
 # app_args[3] = deadline as big-endian uint64 (8 bytes)
@@ -161,20 +191,22 @@ def approval_program():
 
 def handle_lock():
     return Seq(
-        # gtxn[0] must be a payment to this contract
-        Assert(Gtxn[0].type_enum() == TxnType.Payment),
-        Assert(Gtxn[0].receiver() == Global.current_application_address()),
-        # Payment must cover minimum balance
-        Assert(Gtxn[0].amount() >= MBR_MIN),
+        # gtxn[0] must be a USDC ASA transfer to this contract
+        Assert(Gtxn[0].type_enum() == TxnType.AssetTransfer),
+        Assert(Gtxn[0].asset_receiver() == Global.current_application_address()),
+        # Verify the ASA matches the configured USDC token
+        Assert(Gtxn[0].xfer_asset() == App.globalGet(KEY_TOKEN)),
+        # Must transfer a positive amount
+        Assert(Gtxn[0].asset_amount() > Int(0)),
         # Contract must be IDLE
         Assert(state_is(STATE_IDLE)),
         # Record all deal state
-        # buyer = sender of the payment tx (32-byte raw key)
+        # buyer = sender of the ASA transfer tx (32-byte raw key)
         App.globalPut(KEY_STATE,  STATE_LOCKED),
         App.globalPut(KEY_BUYER,  Gtxn[0].sender()),
         # seller = accounts[1] passed in the AppCall (32-byte raw key)
         App.globalPut(KEY_SELLER, Txn.accounts[1]),
-        App.globalPut(KEY_AMOUNT, Gtxn[0].amount()),
+        App.globalPut(KEY_AMOUNT, Gtxn[0].asset_amount()),
         App.globalPut(KEY_HASH,   Txn.application_args[2]),
         App.globalPut(KEY_DEADLN, Btoi(Txn.application_args[3])),
         App.globalPut(KEY_PROOF,  Bytes("")),
@@ -205,12 +237,13 @@ def handle_deliver():
 def handle_release():
     return Seq(
         Assert(state_is(STATE_DELIVERED)),
-        # Inner payment to seller
+        # Inner USDC ASA transfer to seller
         InnerTxnBuilder.Begin(),
         InnerTxnBuilder.SetFields({
-            TxnField.type_enum: TxnType.Payment,
-            TxnField.receiver:  App.globalGet(KEY_SELLER),
-            TxnField.amount:     App.globalGet(KEY_AMOUNT),
+            TxnField.type_enum: TxnType.AssetTransfer,
+            TxnField.xfer_asset: App.globalGet(KEY_TOKEN),
+            TxnField.asset_amount: App.globalGet(KEY_AMOUNT),
+            TxnField.asset_receiver: App.globalGet(KEY_SELLER),
         }),
         InnerTxnBuilder.Submit(),
         App.globalPut(KEY_STATE, STATE_COMPLETED),
@@ -228,12 +261,13 @@ def handle_refund():
         Assert(state_is(STATE_LOCKED)),
         Assert(caller_is_buyer()),
         Assert(deadline_passed()),
-        # Inner payment to buyer
+        # Inner USDC ASA transfer back to buyer
         InnerTxnBuilder.Begin(),
         InnerTxnBuilder.SetFields({
-            TxnField.type_enum: TxnType.Payment,
-            TxnField.receiver:  App.globalGet(KEY_BUYER),
-            TxnField.amount:     App.globalGet(KEY_AMOUNT),
+            TxnField.type_enum: TxnType.AssetTransfer,
+            TxnField.xfer_asset: App.globalGet(KEY_TOKEN),
+            TxnField.asset_amount: App.globalGet(KEY_AMOUNT),
+            TxnField.asset_receiver: App.globalGet(KEY_BUYER),
         }),
         InnerTxnBuilder.Submit(),
         App.globalPut(KEY_STATE, STATE_REFUNDED),
@@ -281,3 +315,4 @@ if __name__ == "__main__":
 
     print()
     print("Saved: contracts/escrow_approval.teal, contracts/escrow_clear.teal")
+    print("Note: Global schema requires num_uints=4, num_byte_slices=7 (includes USDC ASA ID)")

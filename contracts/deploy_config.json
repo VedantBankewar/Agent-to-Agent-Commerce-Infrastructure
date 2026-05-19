@@ -1,6 +1,7 @@
 {
-  "app_id": 758854839,
-  "address": "KD7EDPXKNFNJI3GLFBWKXUOXWAL72T4GQMNA23DVU26CEBLU5T33Q6W3OQ",
+  "app_id": 762869444,
+  "address": "U2CAA3VEUOB2KZKBCHNSB5Z6DJHDB52QEIVBP6PDIZOXNOCJ3EJYUZVJRU",
   "network": "testnet",
-  "confirmed_round": 62444531
+  "usdc_asset_id": 762869461,
+  "confirmed_round": 63537146
 }

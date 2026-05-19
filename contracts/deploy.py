@@ -27,6 +27,8 @@ from algosdk.v2client.algod import AlgodClient
 from algosdk.logic import get_application_address
 from algosdk.transaction import (
     ApplicationCallTxn,
+    AssetConfigTxn,
+    AssetTransferTxn,
     PaymentTxn,
     StateSchema,
     wait_for_confirmation,
@@ -210,7 +212,7 @@ def deploy(
         app_args     = [],
         approval_program = approval_program,
         clear_program    = clear_program,
-        global_schema = global_schema if global_schema is not None else StateSchema(num_uints=3, num_byte_slices=7),
+        global_schema = global_schema if global_schema is not None else StateSchema(num_uints=4, num_byte_slices=7),
         local_schema  = local_schema  if local_schema  is not None else StateSchema(num_uints=0, num_byte_slices=0),
     )
 
@@ -264,6 +266,89 @@ def deploy(
         "txid":         txid,
         "confirmed":    confirmed_round,
     }
+
+
+# ---- USDC ASA ----------------------------------------------------------------
+
+def create_mock_usdc(
+    client:          AlgodClient,
+    creator_address: str,
+    creator_sk:      bytes,
+    total_supply:    int = 1_000_000_000_000,  # 1M USDC (6 decimals)
+) -> int:
+    """
+    Create a mock USDC ASA on testnet for demo purposes.
+
+    Returns the ASA ID.
+    """
+    sp = client.suggested_params()
+
+    txn = AssetConfigTxn(
+        sender         = creator_address,
+        sp             = sp,
+        total          = total_supply,
+        default_frozen = False,
+        unit_name      = "USDC",
+        asset_name     = "Mock USDC (AgentTrade)",
+        decimals       = 6,
+        manager        = creator_address,
+        reserve        = creator_address,
+        strict_empty_address_check = False,
+    )
+    signed = txn.sign(creator_sk)
+    txid = client.send_transaction(signed)
+    result = wait_for_confirmation(client, txid, 30)
+
+    asset_id = result.get("asset-index")
+    if not asset_id:
+        raise RuntimeError(f"ASA creation confirmed but asset-index not in result: {result}")
+
+    print(f"Mock USDC ASA created: asset_id={asset_id}")
+    return asset_id
+
+
+def optin_and_fund_usdc(
+    client:          AlgodClient,
+    creator_address: str,
+    creator_sk:      bytes,
+    recipient_address: str,
+    recipient_sk:    bytes,
+    asset_id:        int,
+    amount:          int,
+) -> None:
+    """
+    Opt-in a recipient to the USDC ASA and transfer USDC to them.
+
+    Args:
+        amount: Amount in micro-USDC (6 decimals). E.g. 50_000_000_000 = $50,000 USDC.
+    """
+    sp = client.suggested_params()
+
+    # Opt-in: recipient sends 0 of the ASA to themselves
+    optin_txn = AssetTransferTxn(
+        sender   = recipient_address,
+        sp       = sp,
+        receiver = recipient_address,
+        amt      = 0,
+        index    = asset_id,
+    )
+    signed_optin = optin_txn.sign(recipient_sk)
+    txid = client.send_transaction(signed_optin)
+    wait_for_confirmation(client, txid, 30)
+    print(f"  Opted in {recipient_address[:8]}... to USDC ASA {asset_id}")
+
+    # Transfer USDC from creator to recipient
+    xfer_txn = AssetTransferTxn(
+        sender   = creator_address,
+        sp       = sp,
+        receiver = recipient_address,
+        amt      = amount,
+        index    = asset_id,
+    )
+    signed_xfer = xfer_txn.sign(creator_sk)
+    txid = client.send_transaction(signed_xfer)
+    wait_for_confirmation(client, txid, 30)
+    print(f"  Transferred {amount / 1_000_000:.2f} USDC to {recipient_address[:8]}...")
 
 
 # ---- Reset -------------------------------------------------------------------
@@ -353,20 +438,37 @@ def main() -> None:
         app_id  = result["app_id"]
         app_addr = result["address"]
 
+        # --- Create mock USDC ASA ---
+        print("\n--- Creating Mock USDC ASA ---")
+        usdc_asset_id_env = os.environ.get("USDC_ASSET_ID")
+        if usdc_asset_id_env:
+            usdc_asset_id = int(usdc_asset_id_env)
+            print(f"Using existing USDC ASA from env: {usdc_asset_id}")
+        else:
+            usdc_asset_id = create_mock_usdc(client, address, sk)
+
+        # --- Opt-in escrow contract to USDC ---
+        print(f"\nOpting escrow contract into USDC ASA {usdc_asset_id}...")
+        from contracts.interact import optin_asset
+        optin_result = optin_asset(client, address, sk, app_id, usdc_asset_id)
+        print(f"  Escrow opted in: txid={optin_result['txid']}")
+
         # Write config
         config = {
-            "app_id":   app_id,
-            "address":  app_addr,
-            "network":  network,
+            "app_id":          app_id,
+            "address":         app_addr,
+            "network":         network,
+            "usdc_asset_id":   usdc_asset_id,
             "confirmed_round": result.get("confirmed", 0),
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
 
         print(f"\nDeployed successfully!")
-        print(f"  App ID:    {app_id}")
-        print(f"  Address:   {app_addr}")
-        print(f"  Config:   {CONFIG_FILE}")
+        print(f"  App ID:         {app_id}")
+        print(f"  Address:        {app_addr}")
+        print(f"  USDC ASA ID:    {usdc_asset_id}")
+        print(f"  Config:        {CONFIG_FILE}")
 
         # Verify by reading state
         print("\nVerifying deployment...")
@@ -375,7 +477,8 @@ def main() -> None:
         print(f"  State:     {state.state_name} (expected: IDLE)")
         print(f"  Buyer:     {state.buyer or '(none)'}")
         print(f"  Seller:    {state.seller or '(none)'}")
-        print(f"  Amount:    {state.amount} microALGO")
+        print(f"  Amount:    {state.amount} micro-USDC")
+        print(f"  Token ID:  {state.token_id} (USDC ASA)")
         print(f"  Deal hash: {state.deal_hash or '(none)'}")
         print(f"  Deadline:  {state.deadline or '(none)'}")
         print(f"  Proof:     {state.proof_hash or '(none)'}")
