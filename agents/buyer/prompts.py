@@ -79,7 +79,7 @@ YOUR TOOLS:
   4. send_counter_offer(supplier_id, unit_price_usd, delivery_days, warranty_yrs, message) — Counter-offer
   5. accept_offer(supplier_id) — Accept a supplier's terms
   6. reject_supplier(supplier_id, reason) — Walk away
-  7. lock_escrow(supplier_id) — Convert USD→ALGO and lock funds on Algorand
+  7. lock_escrow(supplier_id) — Lock USDC funds on Algorand (1:1 with USD)
   8. get_negotiation_status() — Check all negotiation states
 
 NEGOTIATION STRATEGY:
@@ -115,7 +115,7 @@ DECISION FRAMEWORK:
     - If no offers meet constraints → report failure with details
 
 CONSTRAINTS:
-  - All prices are in USD. ALGO conversion happens automatically at escrow lock.
+  - All prices are in USD. Settlement is in USDC (1:1 with USD) on Algorand.
   - Never expose private keys, mnemonics, or API keys.
   - Always verify the escrow transaction was confirmed on-chain.
   - Be efficient — avoid unnecessary tool calls."""

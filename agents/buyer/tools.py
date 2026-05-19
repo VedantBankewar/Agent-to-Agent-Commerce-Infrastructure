@@ -7,7 +7,7 @@ Eight tools that the autonomous LangGraph ReAct buyer agent uses:
     4. send_counter_offer    — Multi-variable counter to one supplier
     5. accept_offer          — Accept supplier's terms
     6. reject_supplier       — Walk away from negotiation
-    7. lock_escrow           — Convert USD -> ALGO, lock on Algorand
+    7. lock_escrow           — Lock USDC in Algorand escrow (1:1 with USD)
     8. get_negotiation_status — View all active negotiations
 """
 
@@ -33,7 +33,6 @@ from utils.logger import get_logger
 logger = get_logger("buyer_tools")
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "db/hackathon.db")
-USD_TO_ALGO_RATE = float(os.getenv("USD_TO_ALGO_RATE", "0.18"))
 
 
 def build_buyer_tools(
@@ -270,11 +269,11 @@ def build_buyer_tools(
 
     @tool
     def lock_escrow(supplier_id: str) -> dict[str, Any]:
-        """Convert USD to ALGO and lock funds in the Algorand escrow contract.
+        """Lock USDC funds in the Algorand escrow contract.
 
         This is the final step after accepting a supplier's offer.
-        Converts the agreed USD amount to ALGO at current rate,
-        locks the ALGO in the smart contract, and anchors the deal hash on-chain.
+        USDC is 1:1 with USD — no conversion needed.
+        Locks the USDC in the smart contract and anchors the deal hash on-chain.
 
         Args:
             supplier_id: The winning supplier whose deal to lock.
@@ -288,11 +287,7 @@ def build_buyer_tools(
 
         terms = state.best_offer
         total_usd = terms.total_usd()
-        rate = USD_TO_ALGO_RATE
-        total_algo = total_usd / rate
-
-        # Store rate for auditability
-        session_manager.context.usd_to_algo_rate = rate
+        total_usdc = total_usd  # 1:1 with USD
 
         # Calculate deadline timestamp
         deadline_str = session_manager.context.request.deadline
@@ -306,8 +301,8 @@ def build_buyer_tools(
 
         EventBus.emit("agent_thinking", {
             "thought": (
-                f"Converting ${total_usd:.2f} USD to ALGO at rate 1 ALGO = ${rate}. "
-                f"Escrow amount: {total_algo:.2f} ALGO"
+                f"Locking ${total_usd:.2f} USDC in escrow (1:1 with USD). "
+                f"Settlement via USDC on Algorand."
             ),
         })
 
@@ -318,11 +313,11 @@ def build_buyer_tools(
             supplier_id=supplier_id,
             item=session_manager.context.request.item,
             quantity=terms.quantity,
-            unit_price=total_algo / terms.quantity,  # Convert to per-unit ALGO
+            unit_price=terms.unit_price_usd,  # USD/USDC 1:1
             delivery_days=terms.delivery_days,
             warranty_yrs=terms.warranty_yrs,
             buyer_agent_id=session_manager.context.buyer_agent_id,
-            budget=session_manager.context.request.budget_usd / rate,
+            budget=session_manager.context.request.budget_usd,
             deadline_ts=deadline_ts,
         )
 
@@ -336,7 +331,7 @@ def build_buyer_tools(
             conn = sqlite3.connect(DATABASE_PATH)
             conn.execute(
                 "UPDATE deals SET amount_usd = ?, usd_to_algo_rate = ? WHERE deal_id = ?",
-                (total_usd, rate, result.deal_id),
+                (total_usd, 1.0, result.deal_id),
             )
             conn.commit()
             conn.close()
@@ -348,8 +343,7 @@ def build_buyer_tools(
             "txid": result.txid,
             "confirmed_round": result.confirmed_round,
             "amount_usd": total_usd,
-            "amount_algo": round(total_algo, 2),
-            "usd_to_algo_rate": rate,
+            "amount_usdc": total_usdc,
             "deal_hash": result.deal_hash,
             "app_id": result.app_id,
         })
@@ -359,8 +353,7 @@ def build_buyer_tools(
             "txid": result.txid,
             "confirmed_round": result.confirmed_round,
             "amount_usd": total_usd,
-            "amount_algo": round(total_algo, 2),
-            "usd_to_algo_rate": rate,
+            "amount_usdc": total_usdc,
             "deal_hash": result.deal_hash,
             "escrow_address": result.escrow_address,
             "app_id": result.app_id,
