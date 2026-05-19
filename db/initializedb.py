@@ -25,6 +25,16 @@ def init_db(db_path: str | Path = DB_PATH) -> None:
         schema = f.read()
 
     cursor.executescript(schema)
+
+    # v2: Add USD columns to deals table if they don't exist
+    existing_cols = {
+        row[1] for row in cursor.execute("PRAGMA table_info(deals)").fetchall()
+    }
+    if "amount_usd" not in existing_cols:
+        cursor.execute("ALTER TABLE deals ADD COLUMN amount_usd REAL")
+    if "usd_to_algo_rate" not in existing_cols:
+        cursor.execute("ALTER TABLE deals ADD COLUMN usd_to_algo_rate REAL")
+
     conn.commit()
     conn.close()
 
