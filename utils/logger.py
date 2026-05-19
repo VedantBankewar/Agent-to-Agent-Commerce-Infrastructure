@@ -117,6 +117,28 @@ def log_txn(logger: logging.Logger, message: str, **extra: Any) -> None:
     logger.info("TXN %s", message, extra=extra)
 
 
+def log_negotiation_event(
+    logger: logging.Logger,
+    event: str,
+    supplier_id: str,
+    round_number: int | None = None,
+    **extra: Any,
+) -> None:
+    """Log a negotiation event at INFO level.
+
+    Args:
+        logger: The logger instance.
+        event: Event name (e.g., 'quote_received', 'counter_sent').
+        supplier_id: The supplier involved.
+        round_number: Current negotiation round.
+        **extra: Additional context fields.
+    """
+    msg = f"NEGOTIATION {event} supplier={supplier_id}"
+    if round_number is not None:
+        msg += f" round={round_number}"
+    logger.info(msg, extra={"supplier_id": supplier_id, "round": round_number, **extra})
+
+
 def _scrub_args(args: dict[str, Any]) -> dict[str, Any]:
     """Remove potentially sensitive values from args before logging."""
     sensitive_keys = {"private_key", "mnemonic", "secret", "api_key", "token", "password"}
