@@ -121,25 +121,40 @@ class LLMSupplier(SupplierInterface):
 
     @staticmethod
     def _get_llm():
-        """Get the LLM instance, or None if not configured."""
-        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            logger.info("No LLM API key found — LLMSupplier will use bot fallback only")
-            return None
+        """Get the LLM instance, or None if not configured.
 
+        Tries providers in order: DigitalOcean GenAI -> Groq -> Google Gemini -> Anthropic.
+        """
         try:
+            if os.getenv("DO_AI_API_KEY"):
+                from langchain_openai import ChatOpenAI
+                return ChatOpenAI(
+                    model=os.getenv("DO_AI_MODEL", "openai-gpt-oss-120b"),
+                    api_key=os.getenv("DO_AI_API_KEY"),
+                    base_url=os.getenv("DO_AI_BASE_URL", "https://inference.do-ai.run/v1"),
+                    temperature=0.7,
+                    max_tokens=200,
+                )
+            if os.getenv("GROQ_API_KEY"):
+                from langchain_groq import ChatGroq
+                raw = os.getenv("GROQ_API_KEY", "")
+                api_key = raw.split(",")[0].strip()
+                return ChatGroq(model="llama-3.3-70b-versatile", api_key=api_key, temperature=0.7, max_tokens=200)
+            if os.getenv("GOOGLE_API_KEY"):
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                return ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_output_tokens=200)
             if os.getenv("ANTHROPIC_API_KEY"):
                 from langchain_anthropic import ChatAnthropic
                 return ChatAnthropic(model="claude-sonnet-4-20250514", temperature=0.7, max_tokens=200)
-            else:
-                from langchain_openai import ChatOpenAI
-                return ChatOpenAI(model="gpt-4o-mini", temperature=0.7, max_tokens=200)
         except ImportError:
             logger.warning("LangChain LLM package not installed")
             return None
         except Exception as e:
             logger.warning("Failed to initialize LLM", extra={"error": str(e)})
             return None
+
+        logger.info("No LLM API key found — LLMSupplier will use bot fallback only")
+        return None
 
     def _enhance_message(
         self,
