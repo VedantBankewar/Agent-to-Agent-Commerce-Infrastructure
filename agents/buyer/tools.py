@@ -289,6 +289,16 @@ def build_buyer_tools(
         total_usd = terms.total_usd()
         total_usdc = total_usd  # 1:1 with USD
 
+        # Hard budget enforcement — never lock more than the buyer's budget
+        budget = session_manager.context.request.budget_usd
+        if total_usd > budget:
+            return {
+                "error": f"Deal total ${total_usd:.2f} exceeds budget ${budget:.2f}. "
+                         f"Negotiate a lower price or reject this supplier.",
+                "total_usd": total_usd,
+                "budget_usd": budget,
+            }
+
         # Calculate deadline timestamp
         deadline_str = session_manager.context.request.deadline
         try:

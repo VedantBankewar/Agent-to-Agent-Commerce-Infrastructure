@@ -83,10 +83,9 @@ def calculate_quote(
     warranty_yrs = row["warranty_yrs"]
     unit_cost    = row["unit_cost"] or 0.0
 
-    # delivery_charge_per_unit = unit_cost × 2% (handling surcharge)
-    delivery_charge = unit_cost * 0.02 if unit_cost > 0 else 0.0
-
-    unit_price  = base_cost * (1 + margin_pct / 100.0) + delivery_charge
+    # Use item-specific unit_cost when available, otherwise fall back to supplier base_cost
+    cost_basis = unit_cost if unit_cost > 0 else base_cost
+    unit_price  = cost_basis * (1 + margin_pct / 100.0)
     total_price = unit_price * quantity
 
     valid_until = datetime.now(timezone.utc) + timedelta(minutes=QUOTE_VALIDITY_MINUTES)
