@@ -49,6 +49,11 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
+    # Serve frontend index.html if available, otherwise API status
+    frontend_index = ROOT / "frontend" / "dist" / "index.html"
+    if frontend_index.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(str(frontend_index), media_type="text/html")
     return {"status": "AgentTrade v2 API is active"}
 
 
