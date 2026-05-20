@@ -11,9 +11,7 @@ import asyncio
 import json
 import os
 import pathlib
-import subprocess
 import sys
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -86,26 +84,29 @@ class ProcurementRequestModel(BaseModel):
 # Legacy helper — subprocess-based pipeline runner
 # ---------------------------------------------------------------------------
 
-def run_script(cmd_list, cwd):
-    """Run a subprocess and yield stdout lines as SSE data."""
+async def run_script(cmd_list, cwd):
+    """Run a subprocess and yield stdout lines as SSE data (async).
+
+    Uses asyncio subprocess so lines stream to the client in real-time
+    instead of buffering until the process finishes.
+    """
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUNBUFFERED"] = "1"
 
-    process = subprocess.Popen(
-        cmd_list,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+    process = await asyncio.create_subprocess_exec(
+        *cmd_list,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
         cwd=cwd,
         env=env,
-        encoding="utf-8",
     )
-    for line in iter(process.stdout.readline, ""):
-        yield f"data: {line}\n\n"
-    process.stdout.close()
-    process.wait()
+    while True:
+        line = await process.stdout.readline()
+        if not line:
+            break
+        yield f"data: {line.decode('utf-8', errors='replace')}\n\n"
+    await process.wait()
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +132,7 @@ async def run_pipeline_endpoint(req: ProcurementRequestModel):
     async def generate():
         # Phase 1: Deploy contracts
         yield "data: => [1/2] Deploying Smart Contracts...\n\n"
-        for chunk in run_script(["python", "contracts/deploy.py"], cwd):
+        async for chunk in run_script(["python", "contracts/deploy.py"], cwd):
             yield chunk
 
         yield "data: \n\n"
@@ -157,7 +158,7 @@ async def run_pipeline_endpoint(req: ProcurementRequestModel):
             if req.requirements:
                 cmd.extend(["--requirements", req.requirements])
 
-        for chunk in run_script(cmd, cwd):
+        async for chunk in run_script(cmd, cwd):
             yield chunk
 
         yield "data: [DONE]\n\n"
@@ -174,9 +175,10 @@ async def release_funds_endpoint():
     """Trigger delivery proof and payment release."""
     cwd = str(ROOT)
 
-    def generate():
+    async def generate():
         yield "data: => Triggering Funds Release...\n\n"
-        yield from run_script(["python", "release_funds.py"], cwd)
+        async for chunk in run_script(["python", "release_funds.py"], cwd):
+            yield chunk
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
