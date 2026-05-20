@@ -2,6 +2,8 @@
 sign_escrow — Procurement agent tool.
 Build the agreement dict, anchor its hash on Algorand via the escrow contract,
 persist the agreement JSON, and record the deal in SQLite.
+
+Settlement uses USDC (ASA) instead of native ALGO. All prices in USD/USDC (1:1).
 """
 
 from __future__ import annotations
@@ -70,11 +72,11 @@ def sign_escrow(
         supplier_id:   Winning supplier's ID.
         item:          Item being procured.
         quantity:      Units being procured.
-        unit_price:    Agreed unit price (ALGO).
+        unit_price:    Agreed unit price (USD/USDC).
         delivery_days: Promised delivery time.
         warranty_yrs:  Warranty period.
         buyer_agent_id:Buyer's agent ID (used to load wallet).
-        budget:        Original budget (for record).
+        budget:        Original budget in USD (for record).
         deadline_ts:   Escrow deadline as Unix timestamp (seconds).
 
     Returns:
@@ -150,11 +152,37 @@ def sign_escrow(
     logger.info("Agreement anchored", extra={"deal_id": deal_id, "deal_hash": deal_hash})
 
     # -------------------------------------------------------------------------
-    # Step 3: Call lock_escrow on-chain
+    # Step 3: Call lock_escrow on-chain (USDC ASA transfer)
     # -------------------------------------------------------------------------
-    amount_microalgo = int(total_price * 1_000_000)  # Convert ALGO → microALGO
+    amount_micro_usdc = int(total_price * 1_000_000)  # Convert USD → micro-USDC (6 decimals)
+
+    # Load USDC ASA ID from deploy config
+    usdc_asset_id = config.get("usdc_asset_id", 0)
+    if not usdc_asset_id:
+        raise ValueError("USDC asset ID not found in deploy config. Run deploy.py first.")
 
     client = get_algo_client()
+
+    # Ensure buyer is opted into USDC ASA
+    try:
+        account_info = client.account_info(buyer_wallet.address)
+        opted_in = any(
+            a.get("asset-id") == usdc_asset_id
+            for a in account_info.get("assets", [])
+        )
+        if not opted_in:
+            from algosdk.transaction import AssetTransferTxn, wait_for_confirmation
+            sp = client.suggested_params()
+            optin_txn = AssetTransferTxn(
+                sender=buyer_wallet.address, sp=sp,
+                receiver=buyer_wallet.address, amt=0, index=usdc_asset_id,
+            )
+            signed = optin_txn.sign(buyer_wallet.private_key)
+            txid = client.send_transaction(signed)
+            wait_for_confirmation(client, txid, 30)
+            logger.info("Buyer opted into USDC ASA", extra={"asset_id": usdc_asset_id})
+    except Exception as e:
+        logger.warning("USDC opt-in check failed", extra={"error": str(e)})
 
     from contracts.interact import lock_escrow
 
@@ -166,14 +194,15 @@ def sign_escrow(
             app_id=app_id,
             seller_address=supplier_addr,
             deal_hash=deal_hash,
-            amount_microalgo=amount_microalgo,
+            amount_micro_usdc=amount_micro_usdc,
             deadline_ts=deadline_ts,
+            usdc_asset_id=usdc_asset_id,
         )
         log_txn(
             logger,
             result["txid"],
             deal_id=deal_id,
-            amount=amount_microalgo,
+            amount=amount_micro_usdc,
             confirmed=result["confirmed"],
         )
         txid = result["txid"]

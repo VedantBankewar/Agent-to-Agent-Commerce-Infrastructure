@@ -104,3 +104,40 @@ CREATE INDEX IF NOT EXISTS idx_deals_status ON deals(status);
 CREATE INDEX IF NOT EXISTS idx_deals_buyer ON deals(buyer_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_supplier ON inventory(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category);
+
+-- v2: Negotiation sessions — one per RFQ + supplier pair
+CREATE TABLE IF NOT EXISTS negotiation_sessions (
+    session_id    TEXT PRIMARY KEY,
+    rfq_id        TEXT NOT NULL,
+    supplier_id   TEXT NOT NULL REFERENCES suppliers(supplier_id),
+    buyer_id      TEXT NOT NULL REFERENCES agents(agent_id),
+    phase         TEXT NOT NULL DEFAULT 'invited'
+                  CHECK (phase IN ('invited','quoted','negotiating','accepted','rejected','expired')),
+    current_round INTEGER NOT NULL DEFAULT 0,
+    max_rounds    INTEGER NOT NULL DEFAULT 7,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(rfq_id, supplier_id)
+);
+
+-- v2: Negotiation rounds — every message exchanged (full audit trail)
+CREATE TABLE IF NOT EXISTS negotiation_rounds (
+    round_id        TEXT PRIMARY KEY,
+    session_id      TEXT REFERENCES negotiation_sessions(session_id),
+    round_number    INTEGER NOT NULL,
+    from_agent      TEXT NOT NULL,
+    to_agent        TEXT NOT NULL,
+    message_type    TEXT NOT NULL
+                    CHECK (message_type IN ('rfq','quote','counter_offer','acceptance','rejection')),
+    unit_price_usd  REAL,
+    quantity        INTEGER,
+    delivery_days   INTEGER,
+    warranty_yrs    REAL,
+    decision        TEXT CHECK (decision IN ('accept','counter','reject') OR decision IS NULL),
+    natural_language TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_neg_sessions_rfq ON negotiation_sessions(rfq_id);
+CREATE INDEX IF NOT EXISTS idx_neg_sessions_supplier ON negotiation_sessions(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_neg_rounds_session ON negotiation_rounds(session_id);

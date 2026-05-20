@@ -75,13 +75,36 @@ def release_funds():
     print(f"    Saved delivery proof to {proof_path}")
 
     # 2.5 Fund the supplier with 0.15 ALGO so they can pay transaction fees
+    #     Also opt supplier into USDC ASA if needed (for receiving payment)
     print("\n[2.5] Funding supplier wallet from deployer...")
     try:
         from utils.wallet import load_wallet, sign_and_send_txn
         deployer = load_wallet("deployer")
         supplier_wallet = load_wallet(supplier_id)
-        sign_and_send_txn(deployer, supplier_wallet.address, 150000, note="Supplier release funding")
+        sign_and_send_txn(deployer, supplier_wallet.address, 250000, note="Supplier release funding")
         print("    Supplier wallet funded for transactions.")
+
+        # Opt supplier into USDC ASA if not already
+        config = load_config()
+        usdc_asset_id = config.get("usdc_asset_id")
+        if usdc_asset_id:
+            client_temp = get_algo_client()
+            account_info = client_temp.account_info(supplier_wallet.address)
+            opted_in = any(
+                a.get("asset-id") == usdc_asset_id
+                for a in account_info.get("assets", [])
+            )
+            if not opted_in:
+                from algosdk.transaction import AssetTransferTxn, wait_for_confirmation
+                sp = client_temp.suggested_params()
+                optin_txn = AssetTransferTxn(
+                    sender=supplier_wallet.address, sp=sp,
+                    receiver=supplier_wallet.address, amt=0, index=usdc_asset_id,
+                )
+                signed = optin_txn.sign(supplier_wallet.private_key)
+                txid = client_temp.send_transaction(signed)
+                wait_for_confirmation(client_temp, txid, 30)
+                print(f"    Supplier opted into USDC ASA {usdc_asset_id}")
     except Exception as e:
         print(f"    Failed to fund supplier: {e}")
 

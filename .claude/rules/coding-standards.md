@@ -40,7 +40,7 @@
 - Never log or print private keys, mnemonics, or API keys
 - Store secrets in `.env` — never in source code
 - Validate Algorand address format before using
-- Validate amounts are positive integers (microALGO)
+- Validate amounts are positive integers (micro-USDC or microALGO for fees)
 - Sanitize all user input in FastAPI endpoints
 
 ## Documentation

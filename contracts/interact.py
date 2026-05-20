@@ -2,7 +2,8 @@
 Escrow contract interaction helpers.
 
 Wraps algosdk v2client for the AgentTrade escrow contract.
-All amounts in microALGO. Deadlines as Unix timestamps (seconds).
+All amounts in micro-USDC (6 decimals). Deadlines as Unix timestamps (seconds).
+Settlement uses USDC (Algorand Standard Asset) instead of native ALGO.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from algosdk.v2client.algod import AlgodClient
 from algosdk.logic import get_application_address
 from algosdk.transaction import (
     ApplicationCallTxn,
+    AssetTransferTxn,
     PaymentTxn,
     StateSchema,
     wait_for_confirmation,
@@ -42,10 +44,6 @@ _STATE_NAMES = {
     STATE_REFUNDED:  "REFUNDED",
 }
 
-# Minimum balance requirement for escrow contract (microALGO)
-MBR_MIN = 100_000
-
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -56,10 +54,11 @@ class EscrowState:
     state_name: str
     buyer:      str
     seller:     str
-    amount:     int      # microALGO
+    amount:     int      # micro-USDC (6 decimals)
     deal_hash:  str
     deadline:   int      # Unix timestamp
     proof_hash: str
+    token_id:   int = 0  # USDC ASA ID
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +150,7 @@ def get_escrow_state(client: AlgodClient, app_id: int) -> EscrowState:
     deal_hash  = get_bytes("h")
     deadline   = get_uint("d")
     proof_hash = get_bytes("p")
+    token_id   = get_uint("t")
 
     return EscrowState(
         state      = state_val,
@@ -161,12 +161,42 @@ def get_escrow_state(client: AlgodClient, app_id: int) -> EscrowState:
         deal_hash  = deal_hash,
         deadline   = deadline,
         proof_hash = proof_hash,
+        token_id   = token_id,
     )
 
 
 # ---------------------------------------------------------------------------
 # Transaction builders — return signed transactions ready to broadcast
 # ---------------------------------------------------------------------------
+
+def build_optin_asset_txn(
+    client:          AlgodClient,
+    creator_address: str,
+    creator_sk:      bytes,
+    app_id:          int,
+    asset_id:        int,
+):
+    """
+    Build an AppCall to opt the escrow contract into a USDC ASA.
+
+    Must be called by the contract creator before locking funds.
+    The contract executes an inner AssetTransfer of 0 to itself.
+    """
+    sp = client.suggested_params()
+    # Increase fee to cover inner txn
+    sp.fee = 2000
+    sp.flat_fee = True
+
+    txn = ApplicationCallTxn(
+        sender      = creator_address,
+        sp          = sp,
+        index       = app_id,
+        on_complete = 0,  # NoOp
+        app_args    = [b"optin_asset", asset_id.to_bytes(8, "big")],
+        foreign_assets = [asset_id],
+    )
+    return txn.sign(creator_sk)
+
 
 def build_lock_group_txn(
     client:           AlgodClient,
@@ -175,12 +205,13 @@ def build_lock_group_txn(
     app_id:           int,
     seller_address:   str,
     deal_hash:        str,
-    amount_microalgo:  int,
+    amount_micro_usdc: int,
     deadline_ts:      int,
+    usdc_asset_id:    int,
 ):
     """
     Build the 2-tx group for locking escrow:
-      [0] Payment: buyer -> escrow contract address
+      [0] AssetTransfer (USDC): buyer -> escrow contract address
       [1] AppCall: lock(deal_hash, deadline)
 
     The seller address is passed as Txn.accounts[1] (32-byte raw public key).
@@ -189,12 +220,12 @@ def build_lock_group_txn(
     escrow_addr = get_escrow_address(app_id)
     sp = client.suggested_params()
 
-    pay_txn = PaymentTxn(
-        sender            = buyer_address,
-        sp                = sp,
-        receiver          = escrow_addr,
-        amt               = amount_microalgo,
-        close_remainder_to = None,
+    usdc_txn = AssetTransferTxn(
+        sender   = buyer_address,
+        sp       = sp,
+        receiver = escrow_addr,
+        amt      = amount_micro_usdc,
+        index    = usdc_asset_id,
     )
 
     app_txn = ApplicationCallTxn(
@@ -210,11 +241,12 @@ def build_lock_group_txn(
         ],
         # seller as accounts[1] — contract reads Txn.accounts[1]
         accounts = [seller_address],
+        foreign_assets = [usdc_asset_id],
     )
 
-    assign_group_id([pay_txn, app_txn])
+    assign_group_id([usdc_txn, app_txn])
 
-    return [pay_txn.sign(buyer_sk), app_txn.sign(buyer_sk)]
+    return [usdc_txn.sign(buyer_sk), app_txn.sign(buyer_sk)]
 
 
 def build_deliver_txn(
@@ -248,20 +280,27 @@ def build_release_txn(
 
     The seller address must be passed in accounts[] so the AVM can resolve
     the inner-transaction receiver from global state.
+    The USDC ASA must be passed in foreign_assets[] for the inner ASA transfer.
     """
     sp = client.suggested_params()
+    # Increase fee to cover inner txn
+    sp.fee = 2000
+    sp.flat_fee = True
 
-    # If seller_address not provided, try to read it from on-chain state
+    # Read on-chain state to get seller and USDC asset ID
     accounts = []
+    foreign_assets = []
+    try:
+        state = get_escrow_state(client, app_id)
+        if not seller_address and state.seller:
+            seller_address = state.seller
+        if state.token_id:
+            foreign_assets = [state.token_id]
+    except Exception:
+        pass
+
     if seller_address:
         accounts = [seller_address]
-    else:
-        try:
-            state = get_escrow_state(client, app_id)
-            if state.seller:
-                accounts = [state.seller]
-        except Exception:
-            pass
 
     txn = ApplicationCallTxn(
         sender      = caller_address,
@@ -270,6 +309,7 @@ def build_release_txn(
         on_complete = 0,
         app_args    = [b"release"],
         accounts    = accounts,
+        foreign_assets = foreign_assets,
     )
     return txn.sign(caller_sk)
 
@@ -284,8 +324,21 @@ def build_refund_txn(
 
     Buyer address is already the sender and is auto-available to the AVM,
     but we also add it to accounts[] for the inner-txn receiver resolution.
+    The USDC ASA must be in foreign_assets[] for the inner ASA transfer.
     """
     sp = client.suggested_params()
+    # Increase fee to cover inner txn
+    sp.fee = 2000
+    sp.flat_fee = True
+
+    # Read on-chain state to get USDC asset ID
+    foreign_assets = []
+    try:
+        state = get_escrow_state(client, app_id)
+        if state.token_id:
+            foreign_assets = [state.token_id]
+    except Exception:
+        pass
 
     txn = ApplicationCallTxn(
         sender      = buyer_address,
@@ -294,6 +347,7 @@ def build_refund_txn(
         on_complete = 0,
         app_args    = [b"refund"],
         accounts    = [buyer_address],
+        foreign_assets = foreign_assets,
     )
     return txn.sign(buyer_sk)
 
@@ -302,6 +356,28 @@ def build_refund_txn(
 # Send helpers — broadcast signed transactions and wait for confirmation
 # ---------------------------------------------------------------------------
 
+def optin_asset(
+    client:          AlgodClient,
+    creator_address: str,
+    creator_sk:      bytes,
+    app_id:          int,
+    asset_id:        int,
+) -> dict:
+    """Opt the escrow contract into a USDC ASA."""
+    signed_txn = build_optin_asset_txn(
+        client, creator_address, creator_sk, app_id, asset_id,
+    )
+    txid = client.send_transaction(signed_txn)
+    result = wait_for_txn(client, txid)
+
+    return {
+        "txid":      txid,
+        "confirmed": result.get("confirmed-round", 0),
+        "app_id":    app_id,
+        "asset_id":  asset_id,
+    }
+
+
 def lock_escrow(
     client:           AlgodClient,
     buyer_address:    str,
@@ -309,13 +385,25 @@ def lock_escrow(
     app_id:           int,
     seller_address:   str,
     deal_hash:        str,
-    amount_microalgo:  int,
+    amount_micro_usdc: int,
     deadline_ts:      int,
+    usdc_asset_id:    int = 0,
 ) -> dict:
-    """Full lock flow: build group, send atomically, wait for confirmation."""
+    """Full lock flow: build group, send atomically, wait for confirmation.
+
+    Uses USDC ASA transfer instead of native ALGO payment.
+    """
+    # Load USDC asset ID from config if not provided
+    if not usdc_asset_id:
+        config = load_config()
+        usdc_asset_id = config.get("usdc_asset_id", 0)
+        if not usdc_asset_id:
+            raise EscrowError("USDC asset ID not configured. Run deploy.py first.")
+
     signed_txns = build_lock_group_txn(
         client, buyer_address, buyer_sk,
-        app_id, seller_address, deal_hash, amount_microalgo, deadline_ts,
+        app_id, seller_address, deal_hash,
+        amount_micro_usdc, deadline_ts, usdc_asset_id,
     )
     group_txid = client.send_transactions(signed_txns)
     result = wait_for_txn(client, group_txid)
@@ -325,7 +413,8 @@ def lock_escrow(
         "confirmed": result.get("confirmed-round", 0),
         "app_id":    app_id,
         "escrow":    get_escrow_address(app_id),
-        "amount":    amount_microalgo,
+        "amount":    amount_micro_usdc,
+        "usdc_asset_id": usdc_asset_id,
     }
 
 
