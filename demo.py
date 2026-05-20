@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 # Load .env before any other imports that read env vars
 try:
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env")
+    load_dotenv(ROOT / ".env", override=True)
 except ImportError:
     pass
 
@@ -93,13 +93,23 @@ def check_prerequisites() -> None:
     """Verify API keys, escrow config, and Redis status."""
     banner("AGENTTRADE v2 — AUTONOMOUS AGENT DEMO")
 
-    # LLM key
-    api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if api_key:
-        provider = "ANTHROPIC" if os.getenv("ANTHROPIC_API_KEY") else "OPENAI"
-        ok(f"{provider}_API_KEY set")
+    # LLM key — check all supported providers
+    llm_providers = [
+        ("DO_AI_API_KEY", "DigitalOcean GenAI"),
+        ("GROQ_API_KEY", "Groq"),
+        ("GOOGLE_API_KEY", "Google Gemini"),
+        ("ANTHROPIC_API_KEY", "Anthropic"),
+        ("OPENAI_API_KEY", "OpenAI"),
+    ]
+    found_provider = None
+    for env_var, name in llm_providers:
+        if os.getenv(env_var):
+            found_provider = name
+            break
+    if found_provider:
+        ok(f"LLM provider: {found_provider}")
     else:
-        fail("No LLM API key — set ANTHROPIC_API_KEY or OPENAI_API_KEY")
+        fail("No LLM API key — set DO_AI_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY, or ANTHROPIC_API_KEY")
         sys.exit(1)
 
     # Escrow deploy config
@@ -191,6 +201,90 @@ def ensure_buyer_agent() -> None:
         sign_and_send_txn(deployer, wallet.address, 25_000_000, note="Buyer demo funding")
     except Exception as e:
         warn(f"Failed to fund buyer from deployer: {e}")
+
+
+def ensure_buyer_usdc(deploy_config: dict | None) -> None:
+    """Ensure the buyer wallet has USDC for escrow locking."""
+    if not deploy_config:
+        return
+    usdc_id = deploy_config.get("usdc_asset_id")
+    if not usdc_id:
+        return
+
+    try:
+        import os
+        from algosdk.v2client.algod import AlgodClient
+        from algosdk.transaction import AssetTransferTxn, wait_for_confirmation
+        from algosdk import mnemonic as mn
+        from algosdk.account import address_from_private_key
+
+        # Get buyer address
+        conn = sqlite3.connect(DATABASE_PATH)
+        row = conn.execute(
+            "SELECT wallet_addr FROM agents WHERE agent_id = ?", (BUYER_AGENT_ID,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return
+        buyer_addr = row[0]
+
+        client = AlgodClient(
+            "", os.getenv("ALGOD_ADDRESS", "https://testnet-api.algonode.cloud"),
+            headers={"User-Agent": "algosdk"},
+        )
+        info = client.account_info(buyer_addr)
+        for asset in info.get("assets", []):
+            if asset["asset-id"] == usdc_id and asset["amount"] > 0:
+                ok(f"Buyer has {asset['amount']/1_000_000:,.2f} USDC")
+                return
+
+        # Buyer has 0 USDC — fund from deployer
+        creator_mn = os.getenv("ALGORAND_CREATOR_MNEMONIC", "").strip('"')
+        creator_sk = mn.to_private_key(creator_mn)
+        creator_addr = address_from_private_key(creator_sk)
+
+        # Check deployer's USDC balance
+        deployer_info = client.account_info(creator_addr)
+        deployer_usdc = 0
+        for asset in deployer_info.get("assets", []):
+            if asset["asset-id"] == usdc_id:
+                deployer_usdc = asset["amount"]
+                break
+
+        if deployer_usdc == 0:
+            warn(f"Deployer has 0 USDC. Fund {creator_addr} with testnet USDC first.")
+            return
+
+        # Opt buyer into USDC if needed
+        opted_in = any(a["asset-id"] == usdc_id for a in info.get("assets", []))
+        if not opted_in:
+            from utils.wallet import load_wallet
+            buyer_wallet = load_wallet(BUYER_AGENT_ID)
+            sp = client.suggested_params()
+            opt_txn = AssetTransferTxn(
+                sender=buyer_addr, sp=sp, receiver=buyer_addr, amt=0, index=usdc_id,
+            )
+            signed = opt_txn.sign(buyer_wallet.private_key)
+            txid = client.send_transaction(signed)
+            wait_for_confirmation(client, txid, 10)
+
+        # Transfer available USDC to buyer (keep 1 USDC reserve for deployer)
+        reserve = 1_000_000  # 1 USDC in micro-USDC
+        transfer_amount = max(0, deployer_usdc - reserve)
+        if transfer_amount == 0:
+            warn("Deployer USDC balance too low to fund buyer.")
+            return
+
+        sp = client.suggested_params()
+        txn = AssetTransferTxn(
+            sender=creator_addr, sp=sp, receiver=buyer_addr, amt=transfer_amount, index=usdc_id,
+        )
+        signed = txn.sign(creator_sk)
+        txid = client.send_transaction(signed)
+        wait_for_confirmation(client, txid, 10)
+        ok(f"Funded buyer with {transfer_amount/1_000_000:,.2f} USDC")
+    except Exception as e:
+        warn(f"Failed to fund buyer USDC: {e}")
 
 
 def verify_escrow() -> dict | None:
@@ -352,6 +446,55 @@ def run_autonomous_agent(
     if context.deal_id:
         print(f"\n  {GREEN}{BOLD}Deal ID: {context.deal_id}{RESET}")
         print(f"  Settlement: USDC (1:1 with USD)")
+
+        # Show on-chain verification addresses
+        try:
+            config_path = ROOT / "contracts" / "deploy_config.json"
+            if config_path.exists():
+                with open(config_path) as f:
+                    deploy_cfg = json.load(f)
+                escrow_addr = deploy_cfg.get("address", "N/A")
+                app_id = deploy_cfg.get("app_id", "N/A")
+                usdc_asa = deploy_cfg.get("usdc_asset_id", "N/A")
+            else:
+                escrow_addr = app_id = usdc_asa = "N/A"
+
+            # Buyer address
+            conn = sqlite3.connect(DATABASE_PATH)
+            buyer_row = conn.execute(
+                "SELECT wallet_addr FROM agents WHERE agent_id = ?", (BUYER_AGENT_ID,)
+            ).fetchone()
+            buyer_addr = buyer_row[0] if buyer_row else "N/A"
+
+            # Supplier address
+            winner_id = None
+            for sid, state in context.negotiations.items():
+                if state.phase.value == "accepted":
+                    winner_id = sid
+                    break
+            supplier_addr = "N/A"
+            if winner_id:
+                sup_row = conn.execute(
+                    "SELECT wallet_addr FROM suppliers WHERE supplier_id = ?", (winner_id,)
+                ).fetchone()
+                supplier_addr = sup_row[0] if sup_row else "N/A"
+            conn.close()
+
+            banner("ON-CHAIN VERIFICATION")
+            print(f"  {CYAN}Escrow App ID:{RESET}    {app_id}")
+            print(f"  {CYAN}USDC ASA ID:{RESET}      {usdc_asa}")
+            print(f"  {CYAN}Buyer Address:{RESET}     {buyer_addr}")
+            print(f"  {CYAN}Supplier Address:{RESET}  {supplier_addr}")
+            print(f"  {CYAN}Escrow Address:{RESET}    {escrow_addr}")
+            print()
+            print(f"  {DIM}Verify on Pera Explorer / AlgoExplorer:{RESET}")
+            print(f"    {DIM}https://explorer.perawallet.app/application/{app_id}/?network=testnet{RESET}")
+            print(f"    {DIM}https://explorer.perawallet.app/address/{buyer_addr}/?network=testnet{RESET}")
+            print(f"    {DIM}https://explorer.perawallet.app/address/{supplier_addr}/?network=testnet{RESET}")
+            print(f"    {DIM}https://explorer.perawallet.app/address/{escrow_addr}/?network=testnet{RESET}")
+        except Exception as e:
+            print(f"  {DIM}(Could not fetch verification addresses: {e}){RESET}")
+
     elif context.deal_phase.value == "failed":
         print(f"\n  {RED}Agent could not complete procurement.{RESET}")
 
@@ -440,7 +583,8 @@ def main() -> None:
     init_database()
     seed_suppliers()
     ensure_buyer_agent()
-    verify_escrow()
+    deploy_config = verify_escrow()
+    ensure_buyer_usdc(deploy_config)
 
     run_autonomous_agent(
         item=item,
