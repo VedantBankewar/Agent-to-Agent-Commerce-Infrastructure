@@ -214,6 +214,16 @@ async def get_negotiation_state(rfq_id: str):
     return {"rfq_id": rfq_id, "sessions": result}
 
 
+# ---------------------------------------------------------------------------
+# Serve frontend static files (must be AFTER all /api routes)
+# ---------------------------------------------------------------------------
+from fastapi.staticfiles import StaticFiles
+
+frontend_dist = ROOT / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
