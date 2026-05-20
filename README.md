@@ -4,6 +4,13 @@
 
 ---
 
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture: three-layer design, buyer agent & tools, negotiation model, EventBus decoupling, data layer, transaction lifecycle
+- [SMART_CONTRACT.md](SMART_CONTRACT.md) — Escrow smart contract: state machine, on-chain state, operations, permissions, security properties, deployment
+
+---
+
 ## Table of Contents
 
 1. [The Problem](#the-problem)
