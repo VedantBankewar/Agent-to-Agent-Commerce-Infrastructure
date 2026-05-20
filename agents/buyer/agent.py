@@ -78,6 +78,7 @@ def _get_llm(groq_key_override: str | None = None):
                 base_url=os.getenv("DO_AI_BASE_URL", "https://inference.do-ai.run/v1"),
                 temperature=0.3,
                 max_tokens=4096,
+                request_timeout=60,
             )
         except Exception as e:
             errors.append(f"DigitalOcean GenAI: {e}")

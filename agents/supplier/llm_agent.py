@@ -134,6 +134,7 @@ class LLMSupplier(SupplierInterface):
                     base_url=os.getenv("DO_AI_BASE_URL", "https://inference.do-ai.run/v1"),
                     temperature=0.7,
                     max_tokens=200,
+                    request_timeout=60,
                 )
             if os.getenv("GROQ_API_KEY"):
                 from langchain_groq import ChatGroq
