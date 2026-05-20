@@ -1,0 +1,79 @@
+# AgentTrade - Future Scope & Architectural Roadmap
+
+This document outlines the features and functionalities achieved in the MVP, followed by a prioritized roadmap for future enhancements, including advanced funding models to make the platform enterprise-ready.
+
+---
+
+## 1. Current State (MVP Achievements)
+
+AgentTrade is an agent-to-agent commerce infrastructure that enables autonomous AI agents to discover suppliers, negotiate procurement terms, and execute transactions with settlement on the Algorand blockchain.
+
+### Core Autonomous Procurement Flow
+- **Goal Initialization:** User inputs a natural language objective.
+- **Market Discovery (Identity Phase):** Procurement Agent queries an SQLite registry to find matching suppliers.
+- **RFQ & Bidding (Nodes Phase):** Buyer agent broadcasts RFQ via Redis; Supplier Agents autonomously compute and return quotes based on inventory/pricing rules.
+- **Quote Evaluation (Logic Phase):** Buyer evaluates quotes via a multi-criteria algorithm (Price 40%, Delivery 30%, Rating 20%, Warranty 10%).
+- **Escrow Execution (Execution Phase):** Agents agree on terms, call the Algorand PyTeal smart contract to lock ALGO, and anchor the deal hash on-chain.
+
+### Settlement Flow
+- **Simulated Delivery Proof:** Supplier simulates delivery and generates a proof hash.
+- **Trustless Payment Release:** Smart contract verifies the delivery hash against the deadline and releases locked ALGO automatically.
+- **Timeout Refunds:** Escrow logic allows buyers to claim refunds if deadlines are missed.
+
+### Key Infrastructure
+- High-fidelity React dashboard visualizing real-time agent reasoning, multi-agent bidding grids, and live transaction profiles.
+- Automated error analysis parsing logs for smart contract and runtime issues.
+- Decentralized identities (Algorand wallets) for all agents.
+
+---
+
+## 2. Prioritized Roadmap & Future Enhancements
+
+### Priority 1: Critical Tech-Stack Alignment (Immediate Next Step)
+*   **Migrate Smart Contracts from PyTeal to Puya (Algorand Python):** PyTeal is legacy. To align with modern Algorand standards (and the project's own AGENTS.md rules), the escrow contract must be rewritten in pure Algorand Python (PuyaPy).
+
+### Priority 2: Trust & Financial Hardening (Short Term)
+*   **Shift from ALGO to Stablecoins (ASAs):** Real businesses require stable pricing. Transition the contract to accept USDC (Algorand Standard Assets) instead of volatile native ALGO.
+*   **Implement Decentralized Storage (IPFS / Arweave):** Move full JSON agreement documents from the local filesystem to IPFS, and anchor the IPFS CID in the Algorand transaction note field.
+
+### Priority 3: Bridging the Physical World (Medium Term)
+*   **Integrate Real-World Delivery Oracles:** Replace simulated delivery with decentralized Oracle networks (like Chainlink) or APIs from logistics providers (FedEx/DHL) to automatically trigger the release of funds.
+*   **On-Chain Reputation System:** Move supplier ratings from SQLite to an Algorand smart contract. Successfully completed escrow contracts can mint "Successful Delivery" tokens to the supplier's DID, creating a mathematically verifiable reputation.
+
+### Priority 4: Advanced Agent Capabilities (Long Term)
+*   **Multi-Variable Complex Negotiation:** Upgrade agents to negotiate up to 5-7 rounds, trading off multiple variables (e.g., price vs. delivery speed vs. payment terms) simultaneously.
+*   **Enterprise Procurement Committees:** Require an Algorand Multi-Sig wallet where multiple agents (Legal, Finance, Procurement) must approve and sign the Escrow Lock transaction based on their domain constraints.
+
+---
+
+## 3. Flexible Funding Models Implementation
+
+To elevate the project to a highly realistic, enterprise-grade B2B infrastructure, the system must support flexible funding/payment models. In real B2B procurement, businesses negotiate payment terms just as aggressively as price.
+
+### Funding Models to Implement
+
+1.  **Full Escrow (Current Model)**
+    *   **How it works:** Buyer locks 100% of funds. 100% is released upon delivery proof.
+    *   **Best for:** Zero-trust transactions. (Poor capital efficiency for buyer).
+
+2.  **Milestone / Split-Funding (Highly Recommended)**
+    *   **How it works:** e.g., 30% Upfront Advance, 70% Escrowed until delivery.
+    *   **The Flow:** Buyer sends total amount to contract. Contract immediately releases 30% to the supplier (working capital), and holds 70% until delivery proof is submitted.
+    *   **Best for:** Custom manufacturing where suppliers need capital to fulfill orders.
+
+3.  **Post-Funded / Net-Terms (Advanced)**
+    *   **How it works:** 0% upfront. Supplier delivers first. Buyer pays Net-30.
+    *   **The Flow:** Contract acts as a ticking invoice. If buyer fails to fund the contract within 30 days of delivery, the contract slashes the buyer's on-chain reputation/DID.
+    *   **Best for:** Highly trusted relationships between established businesses.
+
+### Technical Implementation of Funding Models
+
+1.  **AI / LangChain Layer:**
+    *   Update agent prompts to understand and negotiate `payment_terms` (e.g., suppliers charge a 5% premium if buyers demand 100% Escrow instead of Upfront payment).
+    *   `compare_quotes` tool must mathematically weigh payment terms alongside price.
+2.  **Smart Contract Layer:**
+    *   Update the Algorand Python contract to accept an `upfront_percentage` variable during the lock phase.
+    *   Calculate `AdvanceAmount` and `EscrowAmount`. Send `AdvanceAmount` immediately via Inner Transaction; hold `EscrowAmount` until delivery.
+3.  **Frontend Layer:**
+    *   Update UI to let users specify preferred payment terms.
+    *   Display offered payment terms in the "Multi-Agent Bidding" grid.
