@@ -50,6 +50,103 @@ export default function DeployAgent() {
     scrollToBottom();
   }, [logs, negotiations]);
 
+  // Map a structured EventBus event (from the in-process /api/run_pipeline SSE)
+  // to dashboard state. Non-JSON lines fall back to the legacy text parser.
+  const handleAgentEvent = (event: string, d: any) => {
+    switch (event) {
+      case 'setup_log':
+      case 'agent_thinking': {
+        const msg = d.message || d.thought;
+        if (msg) setLogs(prev => [...prev, String(msg)]);
+        break;
+      }
+      case 'agent_started':
+        setLogs(prev => [...prev, `Agent deployed for ${d?.request?.item ?? ''}`]);
+        break;
+      case 'suppliers_discovered':
+        setLogs(prev => [...prev, `DISCOVERED ${d.count} suppliers`]);
+        break;
+      case 'quote_received': {
+        const t = d.terms || {};
+        setLogs(prev => [...prev, `[QUOTE] ${d.supplier_name}: $${t.unit_price_usd}/unit | ${t.delivery_days}d | ${t.warranty_yrs}yr | Score ${d.score ?? ''}`]);
+        setQuotes(prev => {
+          if (prev.some(q => q.supplier === d.supplier_name)) return prev;
+          return [...prev, {
+            id: Math.random().toString(36).substr(2, 9),
+            supplier: d.supplier_name,
+            score: Math.round((d.score ?? 0) * 10) / 10,
+            price: `$${t.unit_price_usd ?? 0}`,
+            delivery: `${t.delivery_days ?? 0}d`,
+            warranty: `${t.warranty_yrs ?? 0}yr`,
+            isWinner: false,
+          }];
+        });
+        break;
+      }
+      case 'counter_sent': {
+        const t = d.proposed_terms || {};
+        setLogs(prev => [...prev, `[COUNTER ->] ${String(d.supplier_id ?? '').substring(0, 12)} R${d.round ?? 0}`]);
+        setNegotiations(prev => [...prev, {
+          supplier: String(d.supplier_id ?? '').substring(0, 20),
+          round: d.round ?? 0,
+          decision: 'SENT',
+          message: d.reasoning ? String(d.reasoning).substring(0, 120) : `$${t.unit_price_usd ?? ''}/unit`,
+        }]);
+        break;
+      }
+      case 'counter_received': {
+        const t = d.response_terms || {};
+        const decision = (d.decision || 'counter').toString().toUpperCase();
+        setLogs(prev => [...prev, `[<- ${decision}] ${String(d.supplier_id ?? '').substring(0, 12)} R${d.round ?? 0}`]);
+        setNegotiations(prev => [...prev, {
+          supplier: String(d.supplier_id ?? '').substring(0, 20),
+          round: d.round ?? 0,
+          decision,
+          message: d.supplier_message ? String(d.supplier_message).substring(0, 120) : (t.unit_price_usd ? `$${t.unit_price_usd}/unit` : ''),
+        }]);
+        break;
+      }
+      case 'offer_accepted': {
+        const t = d.final_terms || {};
+        setLogs(prev => [...prev, `OFFER ACCEPTED — ${d.supplier_name}`]);
+        setDealDetails(prev => ({
+          ...prev,
+          supplier: d.supplier_name,
+          total: t.total_usd != null ? `$${t.total_usd}` : prev.total,
+          delivery: t.delivery_days != null ? `${t.delivery_days}d` : prev.delivery,
+        }));
+        setQuotes(prev => prev.map(q => ({ ...q, isWinner: q.supplier === d.supplier_name })));
+        break;
+      }
+      case 'supplier_rejected':
+        setLogs(prev => [...prev, `[REJECTED] ${d.supplier_name}: ${(d.reason ?? '').toString().substring(0, 80)}`]);
+        break;
+      case 'escrow_locked': {
+        setLogs(prev => [...prev, `ESCROW LOCKED — txid ${d.txid ?? ''}`]);
+        setDealDetails(prev => ({
+          ...prev,
+          txid: d.txid ?? prev.txid,
+          deal_hash: d.deal_hash ?? prev.deal_hash,
+          app_id: d.app_id != null ? String(d.app_id) : prev.app_id,
+          amount_usd: d.amount_usd != null ? `$${d.amount_usd}` : prev.amount_usd,
+          amount_usdc: d.amount_usdc != null ? `${d.amount_usdc} USDC` : prev.amount_usdc,
+          total: d.amount_usd != null ? `$${d.amount_usd}` : prev.total,
+        }));
+        break;
+      }
+      case 'agent_error':
+        setErrorAnalysis({
+          type: d.error_type || 'Agent Error',
+          details: d.message || 'The agent encountered an error.',
+          solution: 'Check the server logs, the LLM API key, and testnet (ALGO + USDC) funding.',
+        });
+        setIsRunning(false);
+        break;
+      default:
+        break;
+    }
+  };
+
   const runPipeline = async (data: ProcurementFormData) => {
     if (isRunning) return;
     setFormData(data);
@@ -87,6 +184,13 @@ export default function DeployAgent() {
               return;
             }
             if (rawData) {
+              // Structured JSON event from the in-process EventBus; fall back
+              // to legacy text parsing for non-JSON (legacy endpoint) lines.
+              try {
+                const evt = JSON.parse(rawData);
+                if (evt && evt.event) { handleAgentEvent(evt.event, evt.data || {}); continue; }
+              } catch (_e) { /* not JSON -> legacy text parsing below */ }
+
               const cleanData = rawData
                 .replace(/[\u001b\x1b]\[[0-9;]*[a-zA-Z]/g, '')
                 .replace(/\[[0-9]{1,2}m/g, '');
@@ -298,10 +402,11 @@ export default function DeployAgent() {
     { label: "DISCOVERY", sub: pipelineStage > 1 ? "Complete" : pipelineStage === 1 ? "Searching" : "Waiting", active: pipelineStage >= 1 },
     { label: "QUOTING", sub: pipelineStage > 2 ? "Received" : pipelineStage === 2 ? "Collecting" : "Queued", active: pipelineStage >= 2 },
     { label: "NEGOTIATION", sub: pipelineStage > 3 ? "Agreed" : pipelineStage === 3 ? "Negotiating" : "Queued", active: pipelineStage >= 3 },
-    { label: "ESCROW", sub: isFinished ? "Settled" : pipelineStage === 4 ? "Locking" : "Queued", active: pipelineStage >= 4 },
+    { label: "ESCROW", sub: errorAnalysis ? "Failed" : isFinished ? "Settled" : pipelineStage === 4 ? "Locking" : "Queued", active: pipelineStage >= 4 },
   ];
 
   const currentStep = () => {
+    if (errorAnalysis) return "Procurement Failed";
     if (!isRunning && !isFinished) return "Waiting to start...";
     const recent = logs.slice(-10).join(" ");
     if (recent.includes("DISCOVER") || recent.includes("search")) return "Discovering Suppliers";

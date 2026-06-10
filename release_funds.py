@@ -141,20 +141,27 @@ def release_funds():
     
     print(f"\n[5] Database updated. Deal {deal_id} is COMPLETED.\n")
 
-    # 6. Cleanup (Reclaim MBR)
-    print("\n[6] Reclaiming MBR funds (deleting app)...")
-    try:
-        from contracts.interact import delete_app
-        deployer = load_wallet("deployer")
-        del_res = delete_app(
-            client=client,
-            creator_address=deployer.address,
-            creator_sk=deployer.private_key,
-            app_id=app_id
-        )
-        print(f"    App {app_id} deleted. MBR reclaimed! txid: {del_res['txid']}")
-    except Exception as e:
-        print(f"    Failed to reclaim MBR: {e}")
+    # 6. Cleanup (Reclaim MBR) — OFF by default.
+    #    Deleting the app destroys the escrow and breaks the explorer links a
+    #    judge may want to inspect after the demo. Only reclaim MBR when
+    #    explicitly requested via AGENTTRADE_RECLAIM_MBR=1.
+    if os.getenv("AGENTTRADE_RECLAIM_MBR", "0") == "1":
+        print("\n[6] Reclaiming MBR funds (deleting app)...")
+        try:
+            from contracts.interact import delete_app
+            deployer = load_wallet("deployer")
+            del_res = delete_app(
+                client=client,
+                creator_address=deployer.address,
+                creator_sk=deployer.private_key,
+                app_id=app_id
+            )
+            print(f"    App {app_id} deleted. MBR reclaimed! txid: {del_res['txid']}")
+        except Exception as e:
+            print(f"    Failed to reclaim MBR: {e}")
+    else:
+        print(f"\n[6] Preserving app {app_id} for on-chain inspection "
+              f"(set AGENTTRADE_RECLAIM_MBR=1 to delete and reclaim MBR).")
 
     log_color("Successfully released escrow funds to the supplier!")
 

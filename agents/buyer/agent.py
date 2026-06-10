@@ -202,8 +202,17 @@ def run_buyer_agent(
         db_path=db_path or os.getenv("DATABASE_PATH", "db/hackathon.db"),
     )
 
-    # 3. Register default supplier factory (RuleBotSupplier for all)
-    SupplierRegistry.set_default_factory(RuleBotSupplier)
+    # 3. Register default supplier factory.
+    #    Default: RuleBotSupplier (fast, deterministic — ideal for a live demo).
+    #    AGENTTRADE_LLM_SUPPLIERS=1: LLMSupplier (genuine LLM-vs-LLM negotiation;
+    #    it still uses bot pricing and falls back to bot behavior if the LLM is
+    #    unavailable, so the "agent-to-agent" story is real without extra risk).
+    if os.getenv("AGENTTRADE_LLM_SUPPLIERS", "0") == "1":
+        from agents.supplier.llm_agent import LLMSupplier
+        SupplierRegistry.set_default_factory(LLMSupplier)
+        logger.info("Suppliers: LLM-powered (AGENTTRADE_LLM_SUPPLIERS=1)")
+    else:
+        SupplierRegistry.set_default_factory(RuleBotSupplier)
 
     # 4. Emit agent started
     EventBus.emit("agent_started", {

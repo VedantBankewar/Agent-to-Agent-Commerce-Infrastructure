@@ -299,6 +299,47 @@ def build_buyer_tools(
                 "budget_usd": budget,
             }
 
+        # Pre-flight liquidity check: confirm the buyer actually holds enough
+        # USDC to lock, so a low balance fails LOUDLY with a clear message
+        # instead of a confusing on-chain error the UI mistakes for success.
+        try:
+            from contracts.interact import load_config
+            from utils.wallet import get_algo_client, load_wallet
+
+            usdc_id = load_config().get("usdc_asset_id")
+            buyer_addr = load_wallet(session_manager.context.buyer_agent_id).address
+            acct = get_algo_client().account_info(buyer_addr)
+            held_micro = next(
+                (a["amount"] for a in acct.get("assets", []) if a.get("asset-id") == usdc_id),
+                0,
+            )
+            needed_micro = int(round(total_usd * 1_000_000))
+            if held_micro < needed_micro:
+                msg = (
+                    f"Insufficient USDC to lock escrow — buyer holds "
+                    f"{held_micro / 1e6:,.2f} USDC but the deal needs "
+                    f"{needed_micro / 1e6:,.2f} USDC (ASA {usdc_id}). "
+                    f"Fund the buyer/deployer wallet with testnet USDC and retry."
+                )
+                logger.error("Escrow lock aborted — low USDC", extra={
+                    "held_usdc": held_micro / 1e6, "needed_usdc": needed_micro / 1e6,
+                })
+                EventBus.emit("agent_error", {
+                    "error_type": "InsufficientUSDC",
+                    "message": msg,
+                    "details": {
+                        "held_usdc": round(held_micro / 1e6, 2),
+                        "needed_usdc": round(needed_micro / 1e6, 2),
+                        "asset_id": usdc_id,
+                    },
+                })
+                return {"error": msg, "held_usdc": held_micro / 1e6,
+                        "needed_usdc": needed_micro / 1e6}
+        except Exception as _pre:
+            # Don't block on the pre-check itself — fall through to the wrapped
+            # on-chain attempt below if the balance can't be read.
+            logger.warning("USDC pre-check skipped", extra={"error": str(_pre)})
+
         # Calculate deadline timestamp
         deadline_str = session_manager.context.request.deadline
         try:
@@ -318,18 +359,35 @@ def build_buyer_tools(
 
         from tools.sign_escrow import sign_escrow
 
-        result = sign_escrow(
-            rfq_id=state.rfq_id,
-            supplier_id=supplier_id,
-            item=session_manager.context.request.item,
-            quantity=terms.quantity,
-            unit_price=terms.unit_price_usd,  # USD/USDC 1:1
-            delivery_days=terms.delivery_days,
-            warranty_yrs=terms.warranty_yrs,
-            buyer_agent_id=session_manager.context.buyer_agent_id,
-            budget=session_manager.context.request.budget_usd,
-            deadline_ts=deadline_ts,
-        )
+        try:
+            result = sign_escrow(
+                rfq_id=state.rfq_id,
+                supplier_id=supplier_id,
+                item=session_manager.context.request.item,
+                quantity=terms.quantity,
+                unit_price=terms.unit_price_usd,  # USD/USDC 1:1
+                delivery_days=terms.delivery_days,
+                warranty_yrs=terms.warranty_yrs,
+                buyer_agent_id=session_manager.context.buyer_agent_id,
+                budget=session_manager.context.request.budget_usd,
+                deadline_ts=deadline_ts,
+            )
+        except Exception as exc:
+            raw = str(exc)
+            low = any(k in raw.lower() for k in
+                      ("overspend", "below min", "insufficient", "underflow", "balance", "asset"))
+            friendly = (
+                "Escrow lock failed — insufficient on-chain balance (USDC to lock "
+                "and/or ALGO for fees). Fund the buyer/deployer wallet and retry."
+                if low else f"Escrow lock failed: {raw}"
+            )
+            logger.error("Escrow lock failed", extra={"error": raw})
+            EventBus.emit("agent_error", {
+                "error_type": "EscrowLockFailed",
+                "message": friendly,
+                "details": {"raw": raw[:300]},
+            })
+            return {"error": friendly}
 
         # Update context
         session_manager.context.deal_id = result.deal_id

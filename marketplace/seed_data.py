@@ -120,6 +120,38 @@ SUPPLIERS = [
             "products": ["mice", "keyboards", "monitors", "docking stations"],
         },
     },
+    # General-purpose suppliers — guarantee the "general" category always has
+    # at least two bidders so discovery never returns empty for any category
+    # the procurement form can submit. They quote arbitrary free-text items via
+    # base_cost (no inventory row needed), so any product name works.
+    {
+        "name": "OmniSupply",
+        "category": "general",
+        "rating": 4.6,
+        "min_price": 0.55,
+        "base_cost": 0.65,
+        "margin_pct": 15.0,
+        "lead_days": 4,
+        "warranty_yrs": 2.0,
+        "metadata": {
+            "description": "Broad-catalog general supplier with fast fulfillment",
+            "products": ["assorted goods", "office & facility supplies"],
+        },
+    },
+    {
+        "name": "GeneralGoods",
+        "category": "general",
+        "rating": 4.3,
+        "min_price": 0.50,
+        "base_cost": 0.60,
+        "margin_pct": 18.0,
+        "lead_days": 6,
+        "warranty_yrs": 1.0,
+        "metadata": {
+            "description": "General-purpose B2B goods and miscellaneous supplies",
+            "products": ["assorted goods", "misc supplies"],
+        },
+    },
 ]
 
 

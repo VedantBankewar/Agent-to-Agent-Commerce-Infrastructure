@@ -335,74 +335,42 @@ check("tools/sign_escrow.py loads", test_sign_escrow)
 # PHASE 6 — LangChain Agents
 # ═══════════════════════════════════════════════════════════
 
-section("PHASE 6 — LangChain Prompts & Agent Skeletons")
+section("PHASE 6 — Autonomous Buyer Agent & Supplier Implementations (v2)")
 
-# 6.1 procurement prompt
-def test_procurement_prompt():
-    path = Path("agents/prompts/procurement.txt")
-    assert path.exists(), "Missing"
-    text = path.read_text()
-    assert "search_suppliers" in text
-    assert "send_rfq" in text
-    assert "compare_quotes" in text
-    assert "sign_escrow" in text
-    return f"{len(text)} bytes, all 4 tools referenced"
-check("agents/prompts/procurement.txt", test_procurement_prompt)
+# 6.1 buyer prompt builder
+def test_buyer_prompt():
+    from agents.buyer.prompts import build_buyer_prompt
+    assert callable(build_buyer_prompt)
+    return "build_buyer_prompt importable"
+check("agents/buyer/prompts.py", test_buyer_prompt)
 
-# 6.2 supplier prompt
-def test_supplier_prompt():
-    path = Path("agents/prompts/supplier.txt")
-    assert path.exists(), "Missing"
-    text = path.read_text()
-    assert "check_inventory" in text
-    assert "calculate_quote" in text
-    assert "evaluate_counter" in text
-    assert "submit_proof" in text
-    return f"{len(text)} bytes, all 4 tools referenced"
-check("agents/prompts/supplier.txt", test_supplier_prompt)
+# 6.2 buyer tools (8)
+def test_buyer_tools():
+    from agents.buyer.tools import build_buyer_tools
+    # build_buyer_tools only closes over the session manager; it is not invoked
+    # at build time, so None is fine for counting the registered tools.
+    tools = build_buyer_tools(None)
+    assert len(tools) == 8, f"Expected 8 tools, got {len(tools)}"
+    names = sorted(t.name for t in tools)
+    return f"8 tools: {', '.join(names)}"
+check("agents/buyer/tools.py (8 tools)", test_buyer_tools)
 
-# 6.3 supplier_agent.py
-def test_supplier_agent():
-    from agents.supplier_agent import (
-        create_supplier_agent, run_supplier_agent,
-        start_rfq_server, submit_quote_to_marketplace,
-        fetch_pending_rfqs, _build_tools,
-    )
-    tools = _build_tools()
-    assert len(tools) == 4, f"Expected 4 tools, got {len(tools)}"
-    tool_names = sorted([t.name for t in tools])
-    assert tool_names == ["calculate_quote", "check_inventory", "evaluate_counter", "submit_proof"]
-    return f"4 tools: {', '.join(tool_names)}"
-check("agents/supplier_agent.py", test_supplier_agent)
+# 6.3 supplier implementations (bot / LLM / human)
+def test_supplier_impls():
+    from agents.supplier.bot import RuleBotSupplier
+    from agents.supplier.llm_agent import LLMSupplier
+    from agents.supplier.human import HumanSupplier
+    assert RuleBotSupplier and LLMSupplier and HumanSupplier
+    return "RuleBot / LLM / Human suppliers importable"
+check("agents/supplier/* implementations", test_supplier_impls)
 
-# 6.4 procurement_agent.py
-def test_procurement_agent():
-    from agents.procurement_agent import (
-        create_procurement_agent, run_procurement_goal,
-        parse_procurement_goal, run_agent_conversation,
-        _build_tools,
-    )
-    tools = _build_tools()
-    assert len(tools) == 4, f"Expected 4 tools, got {len(tools)}"
-    tool_names = sorted([t.name for t in tools])
-    assert tool_names == ["compare_quotes", "search_suppliers", "send_rfq", "sign_escrow"]
-    return f"4 tools: {', '.join(tool_names)}"
-check("agents/procurement_agent.py", test_procurement_agent)
-
-# 6.5 Goal parser
-def test_goal_parser():
-    from agents.procurement_agent import parse_procurement_goal
-    tests = [
-        ("Buy 50 ergonomic chairs, budget 300000, by June 15", "chair", 50, 300000.0),
-        ("Buy 100 pens, budget 5000, by May 1", "pens", 100, 5000.0),
-        ("Buy 10 desks, budget 50000, by August 2026", "desks", 10, 50000.0),
-    ]
-    for goal, expected_item, expected_qty, expected_budget in tests:
-        parsed = parse_procurement_goal(goal)
-        assert parsed["quantity"] == expected_qty, f"qty: {parsed['quantity']} != {expected_qty} for '{goal}'"
-        assert parsed["budget"] == expected_budget, f"budget: {parsed['budget']} != {expected_budget}"
-    return f"3/3 goals parsed correctly"
-check("parse_procurement_goal", test_goal_parser)
+# 6.4 core negotiation + types
+def test_core_layer():
+    from core.negotiation import NegotiationSessionManager
+    from core.types import ProcurementRequest, NegotiationTerms, Priority
+    assert NegotiationSessionManager and ProcurementRequest and NegotiationTerms and Priority
+    return "core negotiation + types importable"
+check("core/negotiation.py + core/types.py", test_core_layer)
 
 
 # ═══════════════════════════════════════════════════════════

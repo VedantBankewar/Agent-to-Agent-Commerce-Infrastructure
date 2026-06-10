@@ -110,39 +110,148 @@ async def run_script(cmd_list, cwd):
 
 
 # ---------------------------------------------------------------------------
-# Main pipeline endpoint — EventBus SSE streaming
+# Main pipeline endpoint — in-process agent + EventBus -> structured JSON SSE
 # ---------------------------------------------------------------------------
+
+from core.events import EventBus
+
+
+def _default_deadline() -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+
+
+def _build_request(req: ProcurementRequestModel):
+    """Translate the API model into a core ProcurementRequest."""
+    from core.types import ProcurementRequest, Priority
+
+    try:
+        priority = Priority(req.priority)
+    except ValueError:
+        priority = Priority.BALANCED
+    return ProcurementRequest(
+        item=req.item or "Ergonomic Office Chair",
+        category=req.category or "furniture",
+        quantity=req.quantity,
+        budget_usd=req.budget_usd,
+        deadline=req.deadline or _default_deadline(),
+        target_price_usd=req.target_price_usd,
+        min_warranty_yrs=req.min_warranty_yrs,
+        priority=priority,
+        requirements=req.requirements,
+    )
+
+
+def _prepare_environment() -> None:
+    """Run the same setup demo.py does (DB, seed, buyer wallet, escrow, USDC).
+
+    Blocking — call inside an executor thread. Emits coarse setup_log events.
+    """
+    import demo
+
+    EventBus.emit("setup_log", {"message": "Initializing database & marketplace..."})
+    demo.init_database()
+    demo.seed_suppliers()
+    demo.ensure_buyer_agent()
+    EventBus.emit("setup_log", {"message": "Verifying escrow & funding buyer (USDC)..."})
+    deploy_config = demo.verify_escrow()
+    demo.ensure_buyer_usdc(deploy_config)
+
 
 @app.post("/api/run_pipeline")
 async def run_pipeline_endpoint(req: ProcurementRequestModel):
-    """Run the autonomous buyer agent, streaming events via SSE.
+    """Run the autonomous buyer agent IN-PROCESS, streaming structured JSON
+    events over SSE via the EventBus (no subprocess, no stdout parsing).
 
-    Accepts either structured fields or a legacy `goal` string.
+    Each SSE `data:` line is a JSON object `{"event": <type>, "data": {...}}`,
+    except the terminal `data: [DONE]`.
     """
     cwd = str(ROOT)
 
-    # Pre-clean DB for fresh demo run
+    # Pre-clean DB for a fresh demo run
     db_path = ROOT / "db" / "hackathon.db"
     if db_path.exists():
         try:
             db_path.unlink()
-        except Exception:
+        except OSError:
+            pass
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    sentinel = object()
+
+    def listener(event_type: str, data: dict) -> None:
+        # Runs in the worker thread; hand off to the event loop thread-safely.
+        try:
+            msg = json.dumps({"event": event_type, "data": data}, default=str)
+        except (TypeError, ValueError):
+            msg = json.dumps({"event": event_type, "data": {}})
+        loop.call_soon_threadsafe(queue.put_nowait, msg)
+
+    def work() -> None:
+        try:
+            from agents.buyer.agent import run_buyer_agent
+
+            EventBus.emit("setup_log", {"message": "Deploying smart contracts to Algorand Testnet..."})
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+            env["PYTHONUNBUFFERED"] = "1"
+            import subprocess
+            subprocess.run(["python", "contracts/deploy.py"], cwd=cwd, env=env, check=False)
+
+            _prepare_environment()
+            request = _build_request(req)
+
+            EventBus.emit("setup_log", {"message": "Launching autonomous procurement agent..."})
+            run_buyer_agent("demo-buyer-agent", request)
+        except Exception as e:  # never leave the stream hanging
+            EventBus.emit(
+                "agent_error",
+                {"error_type": type(e).__name__, "message": str(e), "details": {}},
+            )
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, sentinel)
+
+    async def generate():
+        EventBus.subscribe(listener)
+        loop.run_in_executor(None, work)
+        try:
+            while True:
+                item = await queue.get()
+                if item is sentinel:
+                    break
+                yield f"data: {item}\n\n"
+        finally:
+            EventBus.unsubscribe(listener)
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
+
+
+# Legacy subprocess + stdout pipeline — proven fallback. The frontend uses the
+# in-process /api/run_pipeline above; if that misbehaves on a given environment,
+# point the frontend at /api/run_pipeline_legacy as a one-line revert.
+@app.post("/api/run_pipeline_legacy")
+async def run_pipeline_legacy_endpoint(req: ProcurementRequestModel):
+    cwd = str(ROOT)
+    db_path = ROOT / "db" / "hackathon.db"
+    if db_path.exists():
+        try:
+            db_path.unlink()
+        except OSError:
             pass
 
     async def generate():
-        # Phase 1: Deploy contracts
         yield "data: => [1/2] Deploying Smart Contracts...\n\n"
         async for chunk in run_script(["python", "contracts/deploy.py"], cwd):
             yield chunk
-
         yield "data: \n\n"
         yield "data: => [2/2] Running Autonomous Procurement Agent...\n\n"
-
-        # Build command args
         cmd = ["python", "demo.py"]
-
         if req.goal and not req.item:
-            # Legacy mode
             cmd.extend(["--goal", req.goal])
         else:
             cmd.extend(["--item", req.item])
@@ -157,13 +266,15 @@ async def run_pipeline_endpoint(req: ProcurementRequestModel):
             cmd.extend(["--priority", req.priority])
             if req.requirements:
                 cmd.extend(["--requirements", req.requirements])
-
         async for chunk in run_script(cmd, cwd):
             yield chunk
-
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +292,11 @@ async def release_funds_endpoint():
             yield chunk
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 # ---------------------------------------------------------------------------

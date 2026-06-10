@@ -12,6 +12,10 @@ langgraph>=0.2.0
 algokit>=2.0.0
 pyteal>=0.26.1
 
+# Agent-native payments — x402 on Algorand (client + server + facilitator)
+# NOTE: confirm the installed import root on first run (x402 vs x402_avm); see x402/README.
+x402-avm[all]
+
 # Web / API Layer
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0

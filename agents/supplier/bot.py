@@ -69,6 +69,7 @@ class RuleBotSupplier(SupplierInterface):
             Quote message with proposed terms.
         """
         quantity = message.proposed_terms.quantity if message.proposed_terms else 1
+        info = self._info  # supplier profile (may be None if not found)
 
         # Extract item name from RFQ natural language: "RFQ for 50 x Ergonomic Office Chair. Budget..."
         item = "Unknown"

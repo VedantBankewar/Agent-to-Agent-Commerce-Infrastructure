@@ -171,34 +171,41 @@ def seed_suppliers() -> None:
 
 
 def ensure_buyer_agent() -> None:
-    """Register the demo buyer agent in the agents table (idempotent)."""
-    from utils.wallet import Wallet, save_wallet
+    """Register the demo buyer agent, REUSING a persistent wallet across runs.
+
+    server.py wipes the DB each run; if we minted a fresh wallet every time, the
+    buyer's USDC (funded from the deployer) would be stranded in the previous
+    run's wallet and the deployer would run dry. So we reuse keys/{BUYER}.json if
+    it exists — the address (and its USDC opt-in/balance) carries over.
+    """
+    from utils.wallet import Wallet, save_wallet, get_supplier_wallet
+
+    # Reuse the persistent buyer wallet if present; only mint one the first time.
+    wallet = get_supplier_wallet(BUYER_AGENT_ID)
+    if wallet is None:
+        wallet = Wallet.generate()
+        save_wallet(BUYER_AGENT_ID, wallet)
 
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT agent_id FROM agents WHERE agent_id = ?", (BUYER_AGENT_ID,))
-    if cursor.fetchone() is not None:
-        conn.close()
-        ok(f"Buyer agent registered — {BUYER_AGENT_ID}")
-        return
-
-    wallet = Wallet.generate()
-    now = datetime.now(timezone.utc).isoformat()
-    cursor.execute(
-        "INSERT INTO agents (agent_id, agent_type, name, wallet_addr, created_at) VALUES (?, 'procurement', ?, ?, ?)",
-        (BUYER_AGENT_ID, BUYER_AGENT_NAME, wallet.address, now),
-    )
-    conn.commit()
+    if cursor.fetchone() is None:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor.execute(
+            "INSERT INTO agents (agent_id, agent_type, name, wallet_addr, created_at) VALUES (?, 'procurement', ?, ?, ?)",
+            (BUYER_AGENT_ID, BUYER_AGENT_NAME, wallet.address, now),
+        )
+        conn.commit()
     conn.close()
-    save_wallet(BUYER_AGENT_ID, wallet)
-    ok(f"Buyer agent registered — {BUYER_AGENT_ID} | {wallet.address[:16]}...")
+    ok(f"Buyer agent ready — {BUYER_AGENT_ID} | {wallet.address[:16]}...")
 
-    # Fund from deployer
+    # Top up ALGO only when low (fees), so we don't re-drain the deployer each run.
     try:
-        from utils.wallet import load_wallet, sign_and_send_txn
-        deployer = load_wallet("deployer")
-        print(f"    Funding buyer {wallet.address[:8]}... from deployer wallet...")
-        sign_and_send_txn(deployer, wallet.address, 25_000_000, note="Buyer demo funding")
+        from utils.wallet import load_wallet, get_balance, sign_and_send_txn
+        if get_balance(wallet.address) < 1_000_000:  # < 1 ALGO
+            deployer = load_wallet("deployer")
+            print(f"    Funding buyer {wallet.address[:8]}... from deployer wallet...")
+            sign_and_send_txn(deployer, wallet.address, 25_000_000, note="Buyer demo funding")
     except Exception as e:
         warn(f"Failed to fund buyer from deployer: {e}")
 
