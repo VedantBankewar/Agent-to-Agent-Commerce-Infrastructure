@@ -9,6 +9,7 @@ export default function DeployAgent() {
   const [isRunning, setIsRunning] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const supplierNamesRef = useRef<Record<string, string>>({}); // supplier_id -> name (for negotiation lines)
   const [formData, setFormData] = useState<ProcurementFormData | null>(null);
   const [dealDetails, setDealDetails] = useState<{
     txid?: string;
@@ -63,12 +64,18 @@ export default function DeployAgent() {
       case 'agent_started':
         setLogs(prev => [...prev, `Agent deployed for ${d?.request?.item ?? ''}`]);
         break;
-      case 'suppliers_discovered':
-        setLogs(prev => [...prev, `DISCOVERED ${d.count} suppliers`]);
+      case 'suppliers_discovered': {
+        (d.suppliers || []).forEach((s: any) => {
+          if (s && s.id && s.name) supplierNamesRef.current[s.id] = s.name;
+        });
+        const names = (d.suppliers || []).map((s: any) => s.name).filter(Boolean).join(', ');
+        setLogs(prev => [...prev, `DISCOVERED ${d.count} suppliers${names ? ` — ${names}` : ''}`]);
         break;
+      }
       case 'quote_received': {
         const t = d.terms || {};
-        setLogs(prev => [...prev, `[QUOTE] ${d.supplier_name}: $${t.unit_price_usd}/unit | ${t.delivery_days}d | ${t.warranty_yrs}yr | Score ${d.score ?? ''}`]);
+        if (d.supplier_id && d.supplier_name) supplierNamesRef.current[d.supplier_id] = d.supplier_name;
+        setLogs(prev => [...prev, `[QUOTE] ${d.supplier_name}: $${t.unit_price_usd}/unit | ${t.delivery_days}d delivery | ${t.warranty_yrs}yr warranty | score ${d.score ?? ''}`]);
         setQuotes(prev => {
           if (prev.some(q => q.supplier === d.supplier_name)) return prev;
           return [...prev, {
@@ -85,30 +92,37 @@ export default function DeployAgent() {
       }
       case 'counter_sent': {
         const t = d.proposed_terms || {};
-        setLogs(prev => [...prev, `[COUNTER ->] ${String(d.supplier_id ?? '').substring(0, 12)} R${d.round ?? 0}`]);
+        const name = supplierNamesRef.current[d.supplier_id] || String(d.supplier_id ?? '').slice(0, 12);
+        setLogs(prev => [...prev, `[COUNTER ->] ${name} R${d.round ?? 0}: $${t.unit_price_usd}/unit | ${t.delivery_days}d | ${t.warranty_yrs}yr`]);
+        if (d.reasoning) setLogs(prev => [...prev, `    "${String(d.reasoning).slice(0, 180)}"`]);
         setNegotiations(prev => [...prev, {
-          supplier: String(d.supplier_id ?? '').substring(0, 20),
+          supplier: name,
           round: d.round ?? 0,
           decision: 'SENT',
-          message: d.reasoning ? String(d.reasoning).substring(0, 120) : `$${t.unit_price_usd ?? ''}/unit`,
+          message: d.reasoning ? String(d.reasoning).slice(0, 140) : `$${t.unit_price_usd ?? ''}/unit`,
         }]);
         break;
       }
       case 'counter_received': {
         const t = d.response_terms || {};
         const decision = (d.decision || 'counter').toString().toUpperCase();
-        setLogs(prev => [...prev, `[<- ${decision}] ${String(d.supplier_id ?? '').substring(0, 12)} R${d.round ?? 0}`]);
+        const name = supplierNamesRef.current[d.supplier_id] || String(d.supplier_id ?? '').slice(0, 12);
+        const termsStr = t.unit_price_usd != null ? `: $${t.unit_price_usd}/unit | ${t.delivery_days}d | ${t.warranty_yrs}yr` : '';
+        setLogs(prev => [...prev, `[<- ${decision}] ${name} R${d.round ?? 0}${termsStr}`]);
+        if (d.supplier_message) setLogs(prev => [...prev, `    "${String(d.supplier_message).slice(0, 180)}"`]);
         setNegotiations(prev => [...prev, {
-          supplier: String(d.supplier_id ?? '').substring(0, 20),
+          supplier: name,
           round: d.round ?? 0,
           decision,
-          message: d.supplier_message ? String(d.supplier_message).substring(0, 120) : (t.unit_price_usd ? `$${t.unit_price_usd}/unit` : ''),
+          message: d.supplier_message ? String(d.supplier_message).slice(0, 140) : (t.unit_price_usd ? `$${t.unit_price_usd}/unit` : ''),
         }]);
         break;
       }
       case 'offer_accepted': {
         const t = d.final_terms || {};
-        setLogs(prev => [...prev, `OFFER ACCEPTED — ${d.supplier_name}`]);
+        if (d.supplier_id && d.supplier_name) supplierNamesRef.current[d.supplier_id] = d.supplier_name;
+        const totalStr = t.total_usd != null ? ` — $${t.unit_price_usd}/unit x ${t.quantity} = $${t.total_usd}` : '';
+        setLogs(prev => [...prev, `OFFER ACCEPTED — ${d.supplier_name}${totalStr}`]);
         setDealDetails(prev => ({
           ...prev,
           supplier: d.supplier_name,
