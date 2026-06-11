@@ -173,7 +173,11 @@ export default function DeployAgent() {
     setErrorAnalysis(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/run_pipeline`, {
+      // Use the full-output pipeline so the System Feed shows the complete
+      // verbose log (setup banners, ESCROW LOCKED block, PROCUREMENT SUMMARY,
+      // and the on-chain verification / explorer links). The frontend's text
+      // parser still extracts the bidding grid + deal details from this output.
+      const response = await fetch(`${API_BASE}/api/run_pipeline_legacy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
