@@ -21,10 +21,20 @@ adjust the import block below — the logic is otherwise unchanged.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from x402.signers import facilitator_signer_from_env
+# Load project .env so ALGORAND_CREATOR_MNEMONIC / AVM_PRIVATE_KEY are available
+# when this service is launched standalone via uvicorn.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
+from x402pay.signers import facilitator_signer_from_env
 
 # --- x402 SDK import (root ambiguity handled defensively) -------------------
 try:  # preferred: detailed-guide import root

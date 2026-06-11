@@ -34,7 +34,7 @@ try:
 except ImportError:
     pass
 
-from x402.config import (  # noqa: E402
+from x402pay.config import (  # noqa: E402
     ALGOD_SERVER,
     ALGOD_TOKEN,
     ALGORAND_TESTNET_CAIP2,

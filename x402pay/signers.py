@@ -173,7 +173,7 @@ def _private_key_b64_from_env() -> str:
 
 def facilitator_signer_from_env() -> AlgorandFacilitatorSigner:
     """Build the facilitator signer from environment configuration."""
-    from x402.config import ALGOD_SERVER, ALGOD_TOKEN
+    from x402pay.config import ALGOD_SERVER, ALGOD_TOKEN
 
     return AlgorandFacilitatorSigner(
         private_key_b64=_private_key_b64_from_env(),

@@ -24,8 +24,16 @@ IMPORT-ROOT NOTE: tries `x402` first, falls back to `x402_avm` (see x402/README)
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, Request
+
+# Load project .env so X402_* / USDC config is available when launched standalone.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+except ImportError:
+    pass
 
 # --- x402 SDK import (root ambiguity handled defensively) -------------------
 try:
@@ -43,7 +51,7 @@ except ImportError:  # some builds expose the root as `x402_avm`
     from x402_avm.mechanisms.avm.exact import ExactAvmServerScheme  # type: ignore
     from x402_avm.schemas import AssetAmount  # type: ignore
 
-from x402.config import ALGORAND_TESTNET_CAIP2, FACILITATOR_URL, usdc_asset_id
+from x402pay.config import ALGORAND_TESTNET_CAIP2, FACILITATOR_URL, usdc_asset_id
 
 
 def build_supplier_x402_app(

@@ -239,13 +239,16 @@ def ensure_buyer_usdc(deploy_config: dict | None) -> None:
             "", os.getenv("ALGOD_ADDRESS", "https://testnet-api.algonode.cloud"),
             headers={"User-Agent": "algosdk"},
         )
+        MIN_BUYER_USDC = 10_000_000  # keep the buyer topped to ~10 USDC for demos
         info = client.account_info(buyer_addr)
-        for asset in info.get("assets", []):
-            if asset["asset-id"] == usdc_id and asset["amount"] > 0:
-                ok(f"Buyer has {asset['amount']/1_000_000:,.2f} USDC")
-                return
+        held = next(
+            (a["amount"] for a in info.get("assets", []) if a["asset-id"] == usdc_id), 0
+        )
+        if held >= MIN_BUYER_USDC:
+            ok(f"Buyer has {held/1_000_000:,.2f} USDC")
+            return
 
-        # Buyer has 0 USDC — fund from deployer
+        # Buyer low on USDC — top up from the deployer
         creator_mn = os.getenv("ALGORAND_CREATOR_MNEMONIC", "").strip('"')
         creator_sk = mn.to_private_key(creator_mn)
         creator_addr = address_from_private_key(creator_sk)

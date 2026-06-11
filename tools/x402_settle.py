@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from x402.config import ALGORAND_TESTNET_CAIP2
-from x402.signers import client_signer_from_agent
+from x402pay.config import ALGORAND_TESTNET_CAIP2
+from x402pay.signers import client_signer_from_agent
 from utils.logger import get_logger
 
 # --- x402 SDK import (root ambiguity handled defensively) -------------------
